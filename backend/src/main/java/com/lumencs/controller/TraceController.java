@@ -1,10 +1,11 @@
 package com.lumencs.controller;
 
-import com.lumencs.model.entity.TraceSpan;
-import com.lumencs.mapper.TraceSpanMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lumencs.common.ApiResponse;
 import com.lumencs.common.R;
+import com.lumencs.mapper.TraceSpanMapper;
+import com.lumencs.model.entity.TraceSpan;
+import com.lumencs.model.vo.TraceSpanVO;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,9 +24,13 @@ public class TraceController {
     }
 
     @GetMapping
-    public R<List<TraceSpan>> list(@RequestParam String sessionId) {
-        return ApiResponse.ok(spanMapper.selectList(new LambdaQueryWrapper<TraceSpan>()
-                .eq(TraceSpan::getSessionId, sessionId)
-                .orderByAsc(TraceSpan::getId)));
+    public R<List<TraceSpanVO>> list(@RequestParam String sessionId) {
+        List<TraceSpanVO> records = spanMapper.selectList(new LambdaQueryWrapper<TraceSpan>()
+                        .eq(TraceSpan::getSessionId, sessionId)
+                        .orderByAsc(TraceSpan::getId))
+                .stream()
+                .map(TraceSpanVO::from)
+                .toList();
+        return ApiResponse.ok(records);
     }
 }

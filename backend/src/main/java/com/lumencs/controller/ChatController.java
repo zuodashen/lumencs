@@ -1,8 +1,10 @@
 package com.lumencs.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.model.dto.CardRequest;
 import com.lumencs.model.dto.ChatRequest;
 import com.lumencs.model.entity.ChatMessage;
+import com.lumencs.model.vo.MessageVO;
 import com.lumencs.service.ChatService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -22,9 +24,11 @@ import java.util.List;
 public class ChatController {
 
     private final ChatService chatService;
+    private final ObjectMapper objectMapper;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, ObjectMapper objectMapper) {
         this.chatService = chatService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -42,7 +46,9 @@ public class ChatController {
     }
 
     @GetMapping("/{sessionId}/messages")
-    public List<ChatMessage> messages(@PathVariable String sessionId) {
-        return chatService.history(sessionId);
+    public List<MessageVO> messages(@PathVariable String sessionId) {
+        return chatService.history(sessionId).stream()
+                .map(msg -> MessageVO.from(msg, objectMapper))
+                .toList();
     }
 }

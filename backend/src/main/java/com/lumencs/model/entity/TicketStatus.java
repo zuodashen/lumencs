@@ -17,7 +17,7 @@ public enum TicketStatus {
             CREATED, EnumSet.of(PROCESSING, ESCALATED, CLOSED),
             PROCESSING, EnumSet.of(WAITING_HUMAN, RESOLVED, ESCALATED),
             WAITING_HUMAN, EnumSet.of(PROCESSING, RESOLVED, ESCALATED),
-            RESOLVED, EnumSet.of(CLOSED, PROCESSING),
+            RESOLVED, EnumSet.of(CLOSED, PROCESSING, ESCALATED),
             ESCALATED, EnumSet.of(PROCESSING, WAITING_HUMAN, RESOLVED),
             CLOSED, EnumSet.noneOf(TicketStatus.class)
     );

@@ -9,6 +9,8 @@ Java 21 编排主链路 + Python RAG sidecar + Vue 3 单页控制台。面向金
 | `web/` | Vue 3 + Vite + Tailwind | 访客聊天台 + 运营控制台 |
 | 基础设施 | MySQL 8 / Redis 7 / Qdrant | 会话落库、限流计数、短期/工作/长期记忆、向量库 |
 
+后端分层（对齐公司脚手架）：`controller / service / mapper / model.{entity,dto,vo}`，DTO 入、VO 出、PageWrapper 分页、审计字段自动填充；Agent 编排层独立于 MVC（`agent / compliance / rag / memory / lock / ratelimit / tracing / modules.*`）。
+
 博客项目 lightdiary 保持独立仓库，本仓先不改博客代码。LumenCS 侧已预留 `/embed`、博客同步与 `blog_search`。
 
 ## 能力

@@ -2,6 +2,7 @@ package com.lumencs.memory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -13,18 +14,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 短期记忆：最近 N 轮对话（Redis List + TTL），读回注入 RAG Prompt。
+ * 轮数与 TTL 由配置 {@code lumencs.memory.max-turns / ttl-minutes} 控制。
+ */
 @Service
 public class ShortTermMemoryService {
 
-    private static final int MAX_TURNS = 20;
-    private static final Duration TTL = Duration.ofMinutes(30);
+    private final int maxTurns;
+    private final Duration ttl;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final Map<String, List<Map<String, String>>> fallback = new ConcurrentHashMap<>();
 
-    public ShortTermMemoryService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public ShortTermMemoryService(StringRedisTemplate redisTemplate,
+                                  ObjectMapper objectMapper,
+                                  @Value("${lumencs.memory.max-turns}") int maxTurns,
+                                  @Value("${lumencs.memory.ttl-minutes}") int ttlMinutes) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.maxTurns = maxTurns;
+        this.ttl = Duration.ofMinutes(ttlMinutes);
     }
 
     public void addMessage(String sessionId, String role, String content) {
@@ -36,13 +46,13 @@ public class ShortTermMemoryService {
         try {
             String key = key(sessionId);
             redisTemplate.opsForList().rightPush(key, objectMapper.writeValueAsString(message));
-            redisTemplate.opsForList().trim(key, -MAX_TURNS, -1);
-            redisTemplate.expire(key, TTL);
+            redisTemplate.opsForList().trim(key, -maxTurns, -1);
+            redisTemplate.expire(key, ttl);
         } catch (Exception e) {
             fallback.computeIfAbsent(sessionId, k -> new ArrayList<>()).add(message);
             List<Map<String, String>> list = fallback.get(sessionId);
-            if (list.size() > MAX_TURNS) {
-                fallback.put(sessionId, new ArrayList<>(list.subList(list.size() - MAX_TURNS, list.size())));
+            if (list.size() > maxTurns) {
+                fallback.put(sessionId, new ArrayList<>(list.subList(list.size() - maxTurns, list.size())));
             }
         }
     }

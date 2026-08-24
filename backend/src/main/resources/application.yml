@@ -1,0 +1,83 @@
+server:
+  port: ${SERVER_PORT:8090}
+  servlet:
+    context-path: /lumencs-api
+
+spring:
+  application:
+    name: lumencs-backend
+  mvc:
+    async:
+      request-timeout: 180000
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:lumen_cs}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:lumencs}
+    password: ${MYSQL_PASSWORD:lumencs}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:sk-placeholder}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${MODEL_NAME:gpt-4o-mini}
+          temperature: 0.0
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+knife4j:
+  enable: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+lumencs:
+  jwt:
+    secret: ${JWT_SECRET:please-change-me-to-a-long-random-string-32+}
+    access-expire-minutes: ${JWT_ACCESS_EXPIRE_MINUTES:30}
+    refresh-expire-hours: ${JWT_REFRESH_EXPIRE_HOURS:168}
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:lumen123}
+  ratelimit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    capacity: ${RATE_LIMIT_CAPACITY:30}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
+    key-prefix: lumencs:ratelimit
+  rag:
+    base-url: ${RAG_SERVICE_URL:http://localhost:8100}
+    top-k: 8
+    rewrite-enabled: ${RAG_REWRITE_ENABLED:true}
+    rerank-enabled: ${RAG_RERANK_ENABLED:true}
+    rerank-top: 3
+  memory:
+    max-turns: 20
+    ttl-minutes: 30
+  blog:
+    base-url: ${BLOG_BASE_URL:}
+    sync-cron: ${BLOG_SYNC_CRON:0 0 */6 * * *}
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [traceId=%X{traceId}] - %msg%n"

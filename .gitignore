@@ -1,0 +1,56 @@
+# Environment
+.env
+*.env.local
+application-local.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Java
+backend/target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+# 本地 Maven 仓库（构建缓存）
+.m2-repo/
+
+# Node
+web/node_modules/
+web/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Data
+*.db
+*.sqlite3
+vector_store/
+qdrant_storage/
+mysql_data/

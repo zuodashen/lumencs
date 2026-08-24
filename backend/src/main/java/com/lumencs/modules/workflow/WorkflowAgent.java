@@ -1,0 +1,161 @@
+package com.lumencs.modules.workflow;
+
+import com.lumencs.agent.AgentEventSink;
+import com.lumencs.agent.AgentState;
+import com.lumencs.memory.LongTermMemoryService;
+import com.lumencs.memory.WorkingMemoryService;
+import com.lumencs.modules.mcp.McpToolServer;
+import org.springframework.stereotype.Component;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Component
+public class WorkflowAgent {
+
+    private final WorkingMemoryService workingMemory;
+    private final LongTermMemoryService longTermMemory;
+    private final McpToolServer mcpToolServer;
+
+    public WorkflowAgent(
+            WorkingMemoryService workingMemory,
+            LongTermMemoryService longTermMemory,
+            McpToolServer mcpToolServer) {
+        this.workingMemory = workingMemory;
+        this.longTermMemory = longTermMemory;
+        this.mcpToolServer = mcpToolServer;
+    }
+
+    public AgentState process(AgentState state, AgentEventSink sink) {
+        WorkflowDef def = WorkflowCatalog.of(state.getIntent());
+        if (def == null) {
+            return state;
+        }
+        workingMemory.put(state.getSessionId(), "workflow", def.id());
+        workingMemory.put(state.getSessionId(), "intent", state.getIntent());
+        workingMemory.mergeSlots(state.getSessionId(), WorkflowCatalog.extractSlots(def.id(), state.getUserMessage()));
+
+        Map<String, Object> slots = workingMemory.getMap(state.getSessionId(), "slots");
+        Map<String, Object> profile = longTermMemory.profile(state.getUserLabel());
+        boolean prefilled = false;
+        for (WorkflowSlot slot : def.slots()) {
+            if (blank(slots.get(slot.name())) && !blank(profile.get(slot.name()))) {
+                slots.put(slot.name(), profile.get(slot.name()));
+                prefilled = true;
+            }
+        }
+        if (prefilled) {
+            workingMemory.put(state.getSessionId(), "slots", slots);
+        }
+
+        if (!state.isCardSubmit()) {
+            emitCard(state, sink, def, slots, prefilled);
+            return state;
+        }
+
+        List<String> missing = WorkflowCatalog.missing(def, slots);
+        sink.step("workflow", "check_slots", Map.of("workflow", def.id(), "missing", missing));
+        if (!missing.isEmpty()) {
+            emitCard(state, sink, def, slots, prefilled);
+            return state;
+        }
+
+        Map<String, Object> args = new LinkedHashMap<>(slots);
+        args.put("session_id", state.getSessionId());
+        args.put("user_label", state.getUserLabel());
+        args.put("title", def.title());
+        args.put("description", buildDescription(def, slots));
+        args.put("priority", "MEDIUM");
+        if (slots.containsKey("ticketNo")) {
+            args.put("ticket_no", slots.get("ticketNo"));
+        }
+        sink.step("workflow", "call_tool", Map.of("tool", def.tool()));
+        Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), def.tool(), args);
+        state.getSubResults().put("workflow", formatResult(def, toolResult));
+        if (toolResult.get("ticketNo") != null) {
+            state.setTicketNo(String.valueOf(toolResult.get("ticketNo")));
+        }
+        if ("milk_tea".equals(def.id()) && !Boolean.FALSE.equals(toolResult.get("success"))) {
+            Map<String, Object> facts = new LinkedHashMap<>();
+            facts.put("drink", slots.getOrDefault("drink", ""));
+            facts.put("size", slots.getOrDefault("size", ""));
+            facts.put("sweetness", slots.getOrDefault("sweetness", ""));
+            facts.put("ice", slots.getOrDefault("ice", ""));
+            facts.put("topping", slots.getOrDefault("topping", ""));
+            facts.put("count", slots.getOrDefault("count", "1"));
+            facts.put("desk", slots.getOrDefault("desk", ""));
+            longTermMemory.remember(state.getUserLabel(), facts);
+        }
+        workingMemory.clearWorkflow(state.getSessionId());
+        sink.step("workflow", "done", toolResult);
+        return state;
+    }
+
+    private void emitCard(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots, boolean prefilled) {
+        String cardId = UUID.randomUUID().toString();
+        workingMemory.put(state.getSessionId(), "pendingCardId", cardId);
+        Map<String, Object> card = new LinkedHashMap<>();
+        card.put("cardId", cardId);
+        card.put("workflow", def.id());
+        card.put("title", def.title());
+        card.put("hint", prefilled ? "已按你上次的口味预填，改一下再确认即可。" : def.hint());
+        card.put("prefilled", prefilled);
+        card.put("fields", def.slots().stream().map(slot -> Map.of(
+                "name", slot.name(),
+                "type", slot.type(),
+                "label", slot.label(),
+                "required", slot.required(),
+                "options", slot.options(),
+                "value", String.valueOf(slots.getOrDefault(slot.name(), ""))
+        )).toList());
+        sink.card(card);
+        state.setWaitingCard(true);
+        state.getSubResults().put("workflow", prefilled
+                ? "已按长期记忆预填，请确认卡片。"
+                : def.hint());
+        sink.step("workflow", "await_card", Map.of("workflow", def.id(), "prefilled", prefilled));
+    }
+
+    private boolean blank(Object value) {
+        return value == null || value.toString().isBlank() || "null".equals(value.toString());
+    }
+
+    private String buildDescription(WorkflowDef def, Map<String, Object> slots) {
+        StringBuilder sb = new StringBuilder(def.title()).append('\n');
+        slots.forEach((k, v) -> sb.append(k).append(": ").append(v).append('\n'));
+        return sb.toString();
+    }
+
+    private String formatResult(WorkflowDef def, Map<String, Object> result) {
+        if (Boolean.FALSE.equals(result.get("success"))) {
+            return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
+        }
+        if (result.get("ticketNo") != null) {
+            return def.title() + " 已受理。工单号：" + result.get("ticketNo") + "，当前状态：" + result.getOrDefault("status", "CREATED");
+        }
+        if (result.get("orderNo") != null) {
+            return """
+                    下单成功，骑手正向工位赶。
+                    单号：%s
+                    %s %s · %s · %s · %s × %s
+                    送到：%s
+                    预计 %s 分钟，合计 ¥%s
+                    （演示订单，未对接真实外卖）
+                    """.formatted(
+                    result.get("orderNo"),
+                    result.getOrDefault("size", ""),
+                    result.getOrDefault("drink", ""),
+                    result.getOrDefault("sweetness", ""),
+                    result.getOrDefault("ice", ""),
+                    result.getOrDefault("topping", ""),
+                    result.getOrDefault("count", 1),
+                    result.getOrDefault("desk", ""),
+                    result.getOrDefault("etaMinutes", 12),
+                    result.getOrDefault("total", 0)
+            ).strip();
+        }
+        return def.title() + " 查询结果：" + result;
+    }
+}

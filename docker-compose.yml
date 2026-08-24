@@ -1,0 +1,92 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lumencs_root}
+      MYSQL_DATABASE: lumen_cs
+      MYSQL_USER: lumencs
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lumencs}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ulumencs", "-p${MYSQL_PASSWORD:-lumencs}"]
+      interval: 8s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 8s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  rag-service:
+    build:
+      context: ./rag-service
+    ports:
+      - "8100:8100"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      - qdrant
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8090:8090"
+    environment:
+      SERVER_PORT: 8090
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DB: lumen_cs
+      MYSQL_USER: lumencs
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lumencs}
+      REDIS_HOST: redis
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      MODEL_NAME: ${MODEL_NAME:-gpt-4o-mini}
+      RAG_SERVICE_URL: http://rag-service:8100
+      JWT_SECRET: ${JWT_SECRET:-please-change-me-to-a-long-random-string-32+}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-lumen123}
+      BLOG_BASE_URL: ${BLOG_BASE_URL:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rag-service:
+        condition: service_started
+
+  web:
+    build:
+      context: ./web
+    ports:
+      - "8088:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  qdrant_data:

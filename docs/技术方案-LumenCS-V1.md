@@ -1,7 +1,7 @@
 # LumenCS V1.0 技术方案
 
-> 目标：把当前 P0 骨架打磨成「能讲、能跑、经得起追问」的个人项目。  
-> Java 编码习惯对齐公司脚手架（分层、统一响应、异常、DTO/VO、Knife4j），**不照搬** Nacos / Feign / 数据权限 / 多数据源 / Flyway。SQL 手工执行 `deploy/sql/schema.sql`。  
+> 目标：把当前 P0 骨架打磨成完整、可运行、可维护的个人项目。  
+> Java 编码习惯对齐脚手架（分层、统一响应、异常、DTO/VO、Knife4j），**不照搬** Nacos / Feign / 数据权限 / 多数据源 / Flyway。SQL 手工执行 `deploy/sql/schema.sql`。  
 > 与博客 `lightdiary`：**产品串联、工程分离**。
 
 ---
@@ -14,7 +14,7 @@ V1.0 已落地：聊天编排、Qdrant RAG、工单落库、SSE 时间线、双 
 
 仍待打磨：
 
-- DTO/VO 已覆盖工单/审核/知识；会话/消息/追踪等少数接口仍 Entity 直出（可后续补齐）
+- DTO/VO 已覆盖全部出参接口（工单/审核/知识/会话/消息/追踪）
 - 分页已覆盖工单/审核/知识列表；其余列表按需扩展
 - 无 Flyway（保持手工 SQL，见 3.2「不采纳」）
 
@@ -24,7 +24,7 @@ V1.0 已落地：聊天编排、Qdrant RAG、工单落库、SSE 时间线、双 
 2. **Agent**：Supervisor 编排完整化，RAG / Tool / 合规 / 记忆 / 可观测全部可演示。
 3. **博客串联**：实验室入口 + 站内助手 + 已发布文章进知识库，**不合并仓库、不共享登录**。
 
-不写伪造 QPS / FCR。简历只写代码里真实存在的能力。
+不写伪造 QPS / FCR。只写代码里真实存在的能力。
 
 ---
 
@@ -74,7 +74,7 @@ lightdiary（已有，JDK8 / Boot 2.7）          LumenCS（本仓，JDK21 / Boo
 | `@RequiredArgsConstructor` + `@Slf4j` | |
 | 业务代码少 try-catch，抛 BizException | |
 
-### 3.3 包结构（已落地，对齐 脚手架 扁平分层）
+### 3.3 包结构（已落地，对齐脚手架 扁平分层）
 
 ```
 com.lumencs
@@ -319,13 +319,14 @@ GET = query；POST = JSON body。
 | RAG 改写 + 重排 | LLM Query 改写（可关）、向量 Top8、LLM 重排 Top3、引用可点 | 已落地 |
 | 双 JWT + 前端续期 | access 30min / refresh 7 天，401 自动刷新 | 已落地 |
 | 工具日志落库 | `cs_tool_log` 持久化，控制台可查 | 已落地 |
-| 包结构分层 | controller / service / mapper / model.{entity,dto,vo} 扁平分层（对齐 脚手架），DTO/VO + 分页覆盖工单/审核/知识 | 已落地 |
-| 后置（未做） | DTO/VO 全面化（会话/消息/追踪）、Service 接口 + IService 风格、自动化测试 | 未做 |
+| 包结构分层 | controller / service / mapper / model.{entity,dto,vo} 扁平分层（对齐脚手架），DTO/VO + 分页覆盖工单/审核/知识 | 已落地 |
+| 检查收尾 | 会话/消息/追踪补 VO（消灭 Entity 直出）、死代码清理、单元测试（状态机 6 例 + 切分器 4 例） | 已落地 |
+| 后置（未做） | Service 接口 + IService 风格、更全面的自动化测试 | 未做 |
 
 ---
 
-## 九、简历可写 vs 禁止写
+## 九、能力边界（诚实口径）
 
-**可以写（已落地）：** 多 Agent Supervisor（意图置信度 + 低置信度澄清）；RAG 完整链路（LLM 改写 → 向量 Top8 → LLM 重排 Top3 → 引用可点）；规则 + LLM 合规 + HITL 收件箱；工单状态机 + 事务 + Redis 分布式锁单号；Redis 限流（IP + session）；双 JWT Refresh Token；SSE 时间线；Java 编排 + Python 检索拆分与降级；槽位办事卡片（工位奶茶 / 退款）；与个人博客公开 API 的知识同步（含定时）与工具调用；工具调用日志入库；OpenAPI（Knife4j / springdoc）+ 统一响应 + traceId。
+**可以陈述（已落地）：** 多 Agent Supervisor（意图置信度 + 低置信度澄清）；RAG 完整链路（LLM 改写 → 向量 Top8 → LLM 重排 Top3 → 引用可点）；规则 + LLM 合规 + HITL 收件箱；工单状态机 + 事务 + Redis 分布式锁单号；Redis 限流（IP + session）；双 JWT Refresh Token；SSE 时间线；Java 编排 + Python 检索拆分与降级；槽位办事卡片（工位奶茶 / 退款）；与个人博客公开 API 的知识同步（含定时）与工具调用；工具调用日志入库；OpenAPI（Knife4j / springdoc）+ 统一响应 + traceId。
 
-**禁止写：** 日均 10 万、QPS 500、Milvus 集群、Spring AI Alibaba、Eino、网关鉴权微服务、与博客「统一用户中心」、以及任何没有压测/监控数据的量化指标（FCR/CSAT/Token 节省百分比等）。
+**避免虚构：** 日均 10 万、QPS 500、Milvus 集群、Spring AI Alibaba、Eino、网关鉴权微服务、与博客「统一用户中心」、以及任何没有压测/监控数据的量化指标（FCR/CSAT/Token 节省百分比等）。

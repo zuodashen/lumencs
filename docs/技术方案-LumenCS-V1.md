@@ -1,7 +1,7 @@
 # LumenCS V1.0 技术方案
 
 > 目标：把当前 P0 骨架打磨成「能讲、能跑、经得起追问」的个人项目。  
-> Java 编码习惯对齐脚手架 `zbp-boot`（分层、统一响应、异常、DTO/VO、Knife4j），**不照搬** Nacos / Feign / 数据权限 / 多数据源 / Flyway。SQL 手工执行 `deploy/sql/schema.sql`。  
+> Java 编码习惯对齐公司脚手架（分层、统一响应、异常、DTO/VO、Knife4j），**不照搬** Nacos / Feign / 数据权限 / 多数据源 / Flyway。SQL 手工执行 `deploy/sql/schema.sql`。  
 > 与博客 `lightdiary`：**产品串联、工程分离**。
 
 ---
@@ -14,8 +14,8 @@ V1.0 已落地：聊天编排、Qdrant RAG、工单落库、SSE 时间线、双 
 
 仍待打磨：
 
-- 包结构扁平，Entity 直接出接口，不符合 zbp-boot 习惯（DTO/VO、分页包装未做）
-- 响应体 `R{state,msg,data,traceId}` 已统一；分页、审计字段（SuperEntity）未做
+- DTO/VO 已覆盖工单/审核/知识；会话/消息/追踪等少数接口仍 Entity 直出（可后续补齐）
+- 分页已覆盖工单/审核/知识列表；其余列表按需扩展
 - 无 Flyway（保持手工 SQL，见 3.2「不采纳」）
 
 ### 目标
@@ -56,7 +56,7 @@ lightdiary（已有，JDK8 / Boot 2.7）          LumenCS（本仓，JDK21 / Boo
 
 依赖方向：**LumenCS 依赖博客的公开只读 API**；博客不依赖 LumenCS 代码。博客侧只加：实验室一条记录 + 可选悬浮组件。
 
-### 3.2 从 zbp-boot 采纳 / 不采纳
+### 3.2 从 脚手架 采纳 / 不采纳
 
 | 采纳 | 不采纳（个人项目过重或与 JDK21 栈冲突） |
 | --- | --- |
@@ -74,25 +74,33 @@ lightdiary（已有，JDK8 / Boot 2.7）          LumenCS（本仓，JDK21 / Boo
 | `@RequiredArgsConstructor` + `@Slf4j` | |
 | 业务代码少 try-catch，抛 BizException | |
 
-### 3.3 目标包结构
+### 3.3 包结构（已落地，对齐 脚手架 扁平分层）
 
 ```
 com.lumencs
   LumenCsApplication
-  common/                 R, PageWrapper, SuperEntity, PageDto
+  controller/             @RestController（DTO入、VO出）
+  service/                领域服务（工单/知识/审核/聊天/认证/博客同步）
+  mapper/                 MyBatis-Plus Mapper（9 个）
+  model/
+    entity/               表实体（含 TicketStatus 状态机枚举）
+    dto/                  入参（LoginRequest/ChatRequest/TicketQueryDTO/ReviewDecideRequest…）
+    vo/                   出参（TicketVO/ReviewVO/DocumentVO）
+  common/                 R, PageWrapper, PageDto, SuperEntity, ApiResponse, TraceContext
   exception/              BizException, ExceptionCode, GlobalExceptionHandler
-  config/                 Security, Knife4j, MybatisPlusMeta, Redis, Mvc, TraceFilter
-  security/               Jwt, TraceId
-  modules
-    auth/       controller, service, impl, mapper, model
-    chat/
-    agent/      supervisor, router, rag, ticket, compliance, tool
-    knowledge/
-    ticket/
-    review/     HITL
-    blogsync/   拉博客文章
-    tracing/
-    rag/        Python 客户端 + 降级
+  config/                 Security, Knife4j, MybatisMetaHandler, MybatisPlusConfig, TraceFilter…
+  security/               JwtService, JwtAuthFilter
+  agent/                  Supervisor / IntentRouter / KnowledgeRAG 等编排 Agent
+  compliance/             ComplianceCheckerAgent（规则+LLM 合规）
+  rag/                    RagClient + RagHit（sidecar 客户端）
+  memory/                 工作/短期/长期记忆服务
+  lock/                   RedisLockService
+  ratelimit/              RateLimitService + RateLimitInterceptor
+  tracing/                AgentTracer
+  modules/
+    workflow/             办事流程（WorkflowAgent / WorkflowCatalog）
+    mcp/                  MCP 工具（McpToolServer / BlogClient）
+    blogsync/             博客定时同步（BlogSyncScheduler）
 ```
 
 `context-path`：`/lumencs-api`（对齐脚手架「以 -api 结尾」）。前端代理同步改。
@@ -130,7 +138,7 @@ com.lumencs
 | 分页 | Query DTO 继承 PageDto；返回 PageWrapper |
 | 文档 | Knife4j，`/doc.html`；Controller `@Tag` + `@Operation` |
 | 建表 | 手工执行 `deploy/sql/schema.sql`，**不集成 Flyway** |
-| 鉴权 | 简单 JWT（admin 账号密码），有效期 72h。**不做** zbp TokenGranter / refresh 全家桶 |
+| 鉴权 | 简单 JWT（admin 账号密码），有效期 72h。**不做** TokenGranter / refresh 全家桶 |
 | 可观测 | TraceId；Micrometer `/actuator/prometheus`；Agent Span 表 |
 
 ### 5.2 工单（事务 + 状态机）
@@ -186,7 +194,7 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 | 短期 | Redis List TTL 30min / 20 轮 | 写入后读回 RAG Prompt |
 | 长期 | Qdrant + MySQL 文档（含博客同步） | 跨会话复用；记忆页展示文档数 |
 
-工作记忆不是注释：卡片提交会 `mergeSlots`，工具跑完 `clearWorkflow`。奶茶下单成功后写入长期画像；下次「再来一杯」预填卡片，仍需用户确认（借鉴 zbp-ai 记忆预填，不做校园 L4 群体记忆）。
+工作记忆不是注释：卡片提交会 `mergeSlots`，工具跑完 `clearWorkflow`。奶茶下单成功后写入长期画像；下次「再来一杯」预填卡片，仍需用户确认（借鉴记忆预填，不做校园 L4 群体记忆）。
 
 意图路由：**关键词优先**，未命中再调 LLM；卡片未提交时短句（「大杯」）不打断流程；「收益多少」等问句才切回知识问答。
 
@@ -245,7 +253,7 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 | --- | --- |
 | `/` | 聊天 + 时间线 + 引用 + **办事卡片** |
 | `/embed` | 给博客 iframe 的瘦身聊天（博客仓后置接入） |
-| `/console/login` | 简单账号密码 JWT，**不照搬** zbp granter / refresh |
+| `/console/login` | 简单账号密码 JWT，**不照搬** granter / refresh |
 | `/console/memory` | 三层记忆快照 |
 | `/console/tools` | MCP 工具列表与调用日志 |
 | `/console/overview` | 健康、工单数、sidecar 状态 |
@@ -263,7 +271,7 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/auth/login` | 简单登录 username/password（不照搬 zbp TokenGranter） |
+| POST | `/api/auth/login` | 简单登录 username/password（不照搬 TokenGranter） |
 | GET | `/api/health` | 健康检查 |
 | POST | `/api/chat` | SSE 聊天（公开） |
 | POST | `/api/chat/card` | SSE 提交办事卡片槽位 |
@@ -311,7 +319,8 @@ GET = query；POST = JSON body。
 | RAG 改写 + 重排 | LLM Query 改写（可关）、向量 Top8、LLM 重排 Top3、引用可点 | 已落地 |
 | 双 JWT + 前端续期 | access 30min / refresh 7 天，401 自动刷新 | 已落地 |
 | 工具日志落库 | `cs_tool_log` 持久化，控制台可查 | 已落地 |
-| 后置（未做） | 包目录继续迁 modules / DTO-VO 全面化 / 分页包装 PageWrapper | 未做 |
+| 包结构分层 | controller / service / mapper / model.{entity,dto,vo} 扁平分层（对齐 脚手架），DTO/VO + 分页覆盖工单/审核/知识 | 已落地 |
+| 后置（未做） | DTO/VO 全面化（会话/消息/追踪）、Service 接口 + IService 风格、自动化测试 | 未做 |
 
 ---
 

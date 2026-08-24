@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 长期画像：跨会话记住口味/工位。借鉴 zbp-ai「记忆预填表单」，不做校园四层群体记忆。
+ * 长期画像：跨会话记住口味/工位。借鉴「记忆预填表单」，不做校园四层群体记忆。
  */
 @Service
 public class LongTermMemoryService {

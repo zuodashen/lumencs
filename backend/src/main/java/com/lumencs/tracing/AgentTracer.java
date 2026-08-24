@@ -1,5 +1,7 @@
 package com.lumencs.tracing;
 
+import com.lumencs.model.entity.TraceSpan;
+import com.lumencs.mapper.TraceSpanMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;

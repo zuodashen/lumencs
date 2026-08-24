@@ -1,5 +1,6 @@
 package com.lumencs.modules.blogsync;
 
+import com.lumencs.service.BlogSyncService;
 import com.lumencs.modules.mcp.BlogClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

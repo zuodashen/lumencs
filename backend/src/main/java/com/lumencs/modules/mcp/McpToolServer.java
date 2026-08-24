@@ -1,12 +1,15 @@
 package com.lumencs.modules.mcp;
 
+import com.lumencs.model.entity.ToolLog;
+import com.lumencs.mapper.ToolLogMapper;
+import com.lumencs.modules.workflow.WorkflowAgent;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lumencs.knowledge.KnowledgeService;
+import com.lumencs.service.KnowledgeService;
 import com.lumencs.rag.RagHit;
-import com.lumencs.ticket.Ticket;
-import com.lumencs.ticket.TicketService;
+import com.lumencs.model.entity.Ticket;
+import com.lumencs.service.TicketService;
 import com.lumencs.tracing.AgentTracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

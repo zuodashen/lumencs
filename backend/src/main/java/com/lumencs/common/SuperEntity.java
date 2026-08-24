@@ -1,5 +1,6 @@
 package com.lumencs.common;
 
+import com.lumencs.config.MybatisMetaHandler;
 import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;

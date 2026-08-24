@@ -2,7 +2,7 @@ package com.lumencs.compliance;
 
 import com.lumencs.agent.AgentEventSink;
 import com.lumencs.agent.AgentState;
-import com.lumencs.review.ReviewService;
+import com.lumencs.service.ReviewService;
 import com.lumencs.tracing.AgentTracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,6 +1,6 @@
 package com.lumencs.agent;
 
-import com.lumencs.knowledge.KnowledgeService;
+import com.lumencs.service.KnowledgeService;
 import com.lumencs.memory.ShortTermMemoryService;
 import com.lumencs.modules.mcp.BlogClient;
 import com.lumencs.rag.RagHit;

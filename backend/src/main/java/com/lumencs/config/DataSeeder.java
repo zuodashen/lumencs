@@ -1,11 +1,11 @@
 package com.lumencs.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.lumencs.auth.AdminUser;
-import com.lumencs.auth.AdminUserMapper;
-import com.lumencs.knowledge.KbDocument;
-import com.lumencs.knowledge.KbDocumentMapper;
-import com.lumencs.knowledge.KnowledgeService;
+import com.lumencs.model.entity.AdminUser;
+import com.lumencs.mapper.AdminUserMapper;
+import com.lumencs.model.entity.KbDocument;
+import com.lumencs.mapper.KbDocumentMapper;
+import com.lumencs.service.KnowledgeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

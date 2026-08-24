@@ -1,7 +1,7 @@
 package com.lumencs.agent;
 
-import com.lumencs.ticket.Ticket;
-import com.lumencs.ticket.TicketService;
+import com.lumencs.model.entity.Ticket;
+import com.lumencs.service.TicketService;
 import com.lumencs.tracing.AgentTracer;
 import org.springframework.stereotype.Component;
 

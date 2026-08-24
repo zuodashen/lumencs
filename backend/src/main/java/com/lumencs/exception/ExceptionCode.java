@@ -1,5 +1,6 @@
 package com.lumencs.exception;
 
+import com.lumencs.common.R;
 /**
  * 业务异常码：与全局异常处理器配合，向前端返回统一 R{state,msg}。
  */

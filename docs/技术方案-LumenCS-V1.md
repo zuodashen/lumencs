@@ -156,8 +156,8 @@ com.lumencs
 | --- | --- |
 | 切分 512/80 | Java |
 | 元数据 MySQL | Java |
-| embedding + Qdrant upsert/search | Python sidecar |
-| Query 改写、LLM 重排 | Java ChatClient（可配置关闭以省 Token） |
+| embedding + Qdrant upsert/search | Python sidecar（本机：硅基流动 `BAAI/bge-m3`，1024 维） |
+| Query 改写、LLM 重排 | Java ChatClient（本机：DMX `deepseek-v4-flash`；可配置关闭以省 Token） |
 | 关键词兜底 | Java，sidecar 超时/5xx 触发 |
 | 引用 | chunkId/source/snippet 写入消息表，前端可点 |
 

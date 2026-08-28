@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/knowledge")
@@ -39,5 +40,10 @@ public class KnowledgeController {
     public R<DocumentVO> create(@Valid @RequestBody CreateDocumentRequest request) {
         return ApiResponse.ok(DocumentVO.from(knowledgeService.ingest(
                 request.getTitle(), request.getSource(), request.getContent())));
+    }
+
+    @PostMapping("/reindex")
+    public R<Map<String, Integer>> reindex() {
+        return ApiResponse.ok(Map.of("reindexed", knowledgeService.reindexAll()));
     }
 }

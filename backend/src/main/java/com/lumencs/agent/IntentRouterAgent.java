@@ -18,7 +18,9 @@ import java.util.Set;
 public class IntentRouterAgent {
 
     private static final Set<String> INTENTS = Set.of(
-            "knowledge_rag", "refund", "account_open", "ticket_query", "complaint", "compliance_checker", "milk_tea"
+            "knowledge_rag", "refund", "account_open", "ticket_query", "complaint",
+            "compliance_checker", "milk_tea", "chitchat",
+            "blog_article", "blog_bookmark", "blog_tag"
     );
 
     /** 低于该置信度触发澄清（LLM 兜底默认 0.6，仅 LLM 明确低置信才澄清） */
@@ -29,7 +31,7 @@ public class IntentRouterAgent {
     private static final String SYSTEM_PROMPT = """
             你是意图识别Agent。只返回 JSON，格式：{"intent": "...", "confidence": 0.0-1.0}
             intent 只能是以下之一：
-            knowledge_rag, refund, account_open, ticket_query, complaint, compliance_checker, milk_tea
+            knowledge_rag, refund, account_open, ticket_query, complaint, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
             规则：
             - 产品咨询、政策、利率、怎么办理的说明 → knowledge_rag
             - 我要退款、申请退钱 → refund
@@ -38,8 +40,13 @@ public class IntentRouterAgent {
             - 投诉、不满意 → complaint
             - 盗刷、欺诈、举报 → compliance_checker
             - 点奶茶、点咖啡、下午茶、口渴、加班喝一杯、再来一杯 → milk_tea
-            confidence 表示你对意图判断的把握程度：用户表述明确时接近 1.0；
-            意图模糊、无法确定、可能是闲聊时 confidence 应低于 0.5。
+            - 写博客、发文章、存草稿、帮我写成博文、发布到博客 → blog_article
+            - 收藏链接、加书签、收藏这个网址 → blog_bookmark
+            - 新建标签、创建一个文章标签（不是给书签打标签） → blog_tag
+            - 问候、闲聊、你是谁、日常问题、心情天气、与办理业务无关的聊天 → chitchat
+            confidence：表述明确时接近 1.0。
+            闲聊请给 0.7 以上，不要把「你好」标成低置信去澄清。
+            只有完全不知道用户要干什么（例如「帮我弄一下」）才把 confidence 压到 0.5 以下。
             """;
 
     private static final String CLARIFICATION_TEXT = """
@@ -51,6 +58,10 @@ public class IntentRouterAgent {
             5. 投诉建议
             6. 举报欺诈 / 盗刷等安全问题
             7. 点一杯奶茶（工位奶茶局）
+            8. 随便聊聊 / 问日常问题
+            9. 写博客 / 存草稿
+            10. 添加书签
+            11. 新建文章标签
             请重新描述一下，我来帮您处理。""";
 
     private final ChatClient chatClient;
@@ -153,10 +164,36 @@ public class IntentRouterAgent {
         if (containsAny(msg, "奶茶", "咖啡", "点单", "下午茶", "口渴", "生椰", "伯牙", "再来一杯")) {
             return "milk_tea";
         }
+        if (containsAny(msg, "写博客", "发文章", "发一篇", "写一篇", "存草稿", "发布文章", "写成博文", "博客草稿")) {
+            return "blog_article";
+        }
+        if (containsAny(msg, "加书签", "收藏这个", "收藏链接", "添加书签", "收藏网址")) {
+            return "blog_bookmark";
+        }
+        if (containsAny(msg, "新建标签", "创建标签", "加个标签")) {
+            return "blog_tag";
+        }
         if (containsAny(msg, "举报", "欺诈", "盗刷", "泄露")) {
             return "compliance_checker";
         }
+        if (isCasualTalk(msg)) {
+            return "chitchat";
+        }
         return "knowledge_rag";
+    }
+
+    /** 短问候或「你是谁」走闲聊；「你好，收益多少」这种长句仍交给后面的 LLM。 */
+    private boolean isCasualTalk(String msg) {
+        String t = msg == null ? "" : msg.trim();
+        if (t.isEmpty()) {
+            return false;
+        }
+        if (containsAny(t, "你是谁", "你叫什么", "介绍一下你", "你会什么", "你能做什么")) {
+            return true;
+        }
+        boolean greeting = containsAny(t, "你好", "您好", "嗨", "在吗", "早上好", "晚上好", "中午好",
+                "谢谢", "再见", "拜拜", "hello", "hi", "hey");
+        return greeting && t.length() <= 16;
     }
 
     private boolean containsAny(String text, String... keys) {
@@ -178,8 +215,7 @@ public class IntentRouterAgent {
 
     private static final class WorkflowNames {
         static String workflow(String intent) {
-            return Set.of("refund", "account_open", "ticket_query", "complaint", "milk_tea").contains(intent)
-                    ? intent : "none";
+            return WorkflowCatalog.isWorkflow(intent) ? intent : "none";
         }
     }
 }

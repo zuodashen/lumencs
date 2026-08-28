@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.agent.AgentEventSink;
 import com.lumencs.agent.AgentState;
 import com.lumencs.agent.SupervisorAgent;
+import com.lumencs.modules.blogwrite.BlogWriteGuard;
 import com.lumencs.memory.ShortTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
 import org.slf4j.Logger;
@@ -56,25 +57,50 @@ public class ChatService {
         this.sseExecutor = sseExecutor;
     }
 
-    public SseEmitter stream(String sessionId, String userLabel, String message) {
+    public SseEmitter stream(String sessionId, String userLabel, String message, String articleSlug, boolean hubOperator) {
         String sid = (sessionId == null || sessionId.isBlank()) ? UUID.randomUUID().toString() : sessionId;
         ensureSession(sid, userLabel);
         saveMessage(sid, "user", message, null, null);
         shortTermMemory.addMessage(sid, "user", message);
-        return run(sid, userLabel, message, false);
+        return run(sid, userLabel, message, false, articleSlug, hubOperator);
     }
 
-    public SseEmitter streamCard(String sessionId, String userLabel, String cardId, Map<String, Object> values) {
+    public SseEmitter streamCard(String sessionId, String userLabel, String cardId, String confirmToken,
+                                 Map<String, Object> values, boolean hubOperator) {
         String sid = (sessionId == null || sessionId.isBlank()) ? UUID.randomUUID().toString() : sessionId;
         ensureSession(sid, userLabel);
+        String pendingWorkflow = workingMemory.peekPendingWorkflow(sid);
+        if (BlogWriteGuard.isWriteIntent(pendingWorkflow) && !hubOperator) {
+            return finishPlain(sid, BlogWriteGuard.LOGIN_HINT);
+        }
+        String consumed = workingMemory.consumeConfirm(sid, cardId, confirmToken);
+        if (consumed == null) {
+            return finishPlain(sid, BlogWriteGuard.TOKEN_HINT);
+        }
         workingMemory.mergeSlots(sid, values);
-        String summary = "已提交办理卡片：" + (values == null ? "{}" : values.toString());
+        String summary = cardSummary(values);
         saveMessage(sid, "user", summary, cardId, null);
         shortTermMemory.addMessage(sid, "user", summary);
-        return run(sid, userLabel, summary, true);
+        return run(sid, userLabel, summary, true, null, hubOperator);
     }
 
-    private SseEmitter run(String sid, String userLabel, String message, boolean cardSubmit) {
+    private static String cardSummary(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return "已提交办理卡片";
+        }
+        Object title = values.get("title");
+        if (title != null && !title.toString().isBlank()) {
+            return "已确认卡片：" + title;
+        }
+        Object name = values.get("name");
+        if (name != null && !name.toString().isBlank()) {
+            return "已确认卡片：" + name;
+        }
+        return "已提交办理卡片";
+    }
+
+    private SseEmitter run(String sid, String userLabel, String message, boolean cardSubmit, String articleSlug,
+                           boolean hubOperator) {
         SseEmitter emitter = new SseEmitter(180_000L);
         sseExecutor.execute(() -> {
             try {
@@ -84,30 +110,58 @@ public class ChatService {
                 state.setUserLabel(userLabel == null || userLabel.isBlank() ? "访客" : userLabel);
                 state.setUserMessage(message);
                 state.setCardSubmit(cardSubmit);
+                state.setArticleSlug(articleSlug);
+                state.setHubOperator(hubOperator);
                 AgentState result = supervisorAgent.orchestrate(state, new EmitterSink(emitter));
-                saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(), result.getCitations());
+                var saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(), result.getCitations());
                 shortTermMemory.addMessage(sid, "assistant", result.getFinalResponse());
                 Map<String, Object> done = new LinkedHashMap<>();
                 done.put("sessionId", sid);
+                done.put("messageId", saved == null ? null : saved.getId());
                 done.put("content", result.getFinalResponse());
                 done.put("intent", result.getIntent());
                 done.put("compliancePassed", result.isCompliancePassed());
                 done.put("citations", result.getCitations());
                 done.put("ticketNo", result.getTicketNo());
                 done.put("waitingCard", result.isWaitingCard());
+                done.put("reviewPending", result.isReviewPending());
+                done.put("reviewId", result.getReviewId());
+                done.put("articleSlug", articleSlug == null ? "" : articleSlug);
                 send(emitter, "message", done);
                 send(emitter, "done", Map.of("ok", true));
                 emitter.complete();
             } catch (Exception e) {
                 log.error("chat stream failed", e);
                 try {
-                    send(emitter, "error", Map.of("message", e.getMessage() == null ? "处理失败" : e.getMessage()));
+                    send(emitter, "error", Map.of("message", friendlyAiError(e)));
+                    send(emitter, "done", Map.of("ok", false));
+                    emitter.complete();
                 } catch (Exception ignored) {
-                    // ignore
+                    emitter.completeWithError(e);
                 }
-                emitter.completeWithError(e);
             }
         });
+        return emitter;
+    }
+
+    private SseEmitter finishPlain(String sid, String text) {
+        SseEmitter emitter = new SseEmitter(30_000L);
+        try {
+            send(emitter, "session", Map.of("sessionId", sid));
+            saveMessage(sid, "assistant", text, null, null);
+            Map<String, Object> done = new LinkedHashMap<>();
+            done.put("sessionId", sid);
+            done.put("content", text);
+            done.put("intent", "");
+            done.put("compliancePassed", true);
+            done.put("citations", List.of());
+            done.put("waitingCard", false);
+            send(emitter, "message", done);
+            send(emitter, "done", Map.of("ok", true));
+            emitter.complete();
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+        }
         return emitter;
     }
 
@@ -127,7 +181,7 @@ public class ChatService {
         sessionMapper.insert(session);
     }
 
-    private void saveMessage(String sid, String role, String content, String intent, List<Map<String, Object>> citations) {
+    private ChatMessage saveMessage(String sid, String role, String content, String intent, List<Map<String, Object>> citations) {
         ChatMessage msg = new ChatMessage();
         msg.setSessionId(sid);
         msg.setRole(role);
@@ -142,6 +196,23 @@ public class ChatService {
             }
         }
         messageMapper.insert(msg);
+        return msg;
+    }
+
+    /** 网关 401 时浏览器会把异常断开显示成 network error，这里先转成可读文案再正常结束 SSE。 */
+    private static String friendlyAiError(Exception e) {
+        String raw = e.getMessage() == null ? "" : e.getMessage();
+        String lower = raw.toLowerCase();
+        if (raw.contains("无效的令牌") || lower.contains("incorrect api key") || lower.contains("invalid api key")) {
+            return "聊天网关拒绝了密钥（无效的令牌）。请到 DMX 控制台重新复制 API Key，写入项目根目录 .env 的 OPENAI_API_KEY 后执行 docker compose up -d backend。";
+        }
+        if (lower.contains("401") || lower.contains("unauthorized")) {
+            return "聊天网关返回 401，密钥无效或未开通当前模型（" + System.getenv().getOrDefault("MODEL_NAME", "gpt-4o-mini") + "）。";
+        }
+        if (lower.contains("timeout") || lower.contains("timed out")) {
+            return "聊天网关超时，请稍后重试。";
+        }
+        return raw.isBlank() ? "处理失败" : raw;
     }
 
     private void send(SseEmitter emitter, String event, Object data) {

@@ -87,9 +87,22 @@ public class KnowledgeRAGAgent {
 
     public AgentState process(AgentState state, AgentEventSink sink) {
         sink.step("knowledge_rag", "start", Map.of());
+        Long scopedDocId = null;
+        if (state.getArticleSlug() != null && !state.getArticleSlug().isBlank()) {
+            var doc = knowledgeService.findByBlogSlug(state.getArticleSlug());
+            if (doc != null) {
+                scopedDocId = doc.getId();
+                sink.step("knowledge_rag", "scope", Map.of(
+                        "slug", state.getArticleSlug(),
+                        "documentId", scopedDocId,
+                        "title", doc.getTitle()
+                ));
+            }
+        }
         String searchQuery = rewriteQuery(state);
+        Long docId = scopedDocId;
         List<RagHit> hits = tracer.trace(state.getSessionId(), "knowledge_rag", "search", Map.of("query", searchQuery),
-                () -> knowledgeService.search(searchQuery));
+                () -> knowledgeService.search(searchQuery, docId));
 
         List<RagHit> ranked = rerank(hits, searchQuery);
         sink.step("knowledge_rag", "retrieved", Map.of(
@@ -108,7 +121,7 @@ public class KnowledgeRAGAgent {
             item.put("snippet", hit.getContent() == null ? "" : trim(hit.getContent(), 180));
             citations.add(item);
         }
-        List<Map<String, Object>> blogArticles = blogClient.enabled()
+        List<Map<String, Object>> blogArticles = (scopedDocId == null && blogClient.enabled())
                 ? blogClient.search(state.getUserMessage())
                 : List.of();
         for (Map<String, Object> article : blogArticles) {

@@ -3,6 +3,7 @@ package com.lumencs.agent;
 import com.lumencs.compliance.ComplianceCheckerAgent;
 import com.lumencs.memory.LongTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
+import com.lumencs.modules.blogwrite.BlogWriteGuard;
 import com.lumencs.modules.workflow.WorkflowAgent;
 import com.lumencs.modules.workflow.WorkflowCatalog;
 import com.lumencs.tracing.AgentTracer;
@@ -20,6 +21,7 @@ public class SupervisorAgent {
 
     private final IntentRouterAgent intentRouter;
     private final KnowledgeRAGAgent knowledgeAgent;
+    private final ChitchatAgent chitchatAgent;
     private final WorkflowAgent workflowAgent;
     private final ComplianceCheckerAgent complianceAgent;
     private final WorkingMemoryService workingMemory;
@@ -29,6 +31,7 @@ public class SupervisorAgent {
     public SupervisorAgent(
             IntentRouterAgent intentRouter,
             KnowledgeRAGAgent knowledgeAgent,
+            ChitchatAgent chitchatAgent,
             WorkflowAgent workflowAgent,
             ComplianceCheckerAgent complianceAgent,
             WorkingMemoryService workingMemory,
@@ -36,6 +39,7 @@ public class SupervisorAgent {
             AgentTracer tracer) {
         this.intentRouter = intentRouter;
         this.knowledgeAgent = knowledgeAgent;
+        this.chitchatAgent = chitchatAgent;
         this.workflowAgent = workflowAgent;
         this.complianceAgent = complianceAgent;
         this.workingMemory = workingMemory;
@@ -69,7 +73,8 @@ public class SupervisorAgent {
                     state.getSubResults().put("compliance_notice",
                             "已记录您的安全相关诉求。建议通过官方渠道核实，并等待人工客服介入。");
                 }
-                if (!state.isWaitingCard() && !state.isReviewPending()) {
+                if (!state.isWaitingCard() && !state.isReviewPending()
+                        && (state.getIntent() == null || !state.getIntent().startsWith("blog_"))) {
                     complianceAgent.process(state, sink);
                 }
             }
@@ -87,11 +92,19 @@ public class SupervisorAgent {
 
     private void dispatch(AgentState state, AgentEventSink sink) {
         String intent = state.getIntent();
+        if (BlogWriteGuard.isWriteIntent(intent) && !state.isHubOperator()) {
+            state.getSubResults().put("hub_auth", BlogWriteGuard.LOGIN_HINT);
+            return;
+        }
         if (WorkflowCatalog.isWorkflow(intent)) {
             workflowAgent.process(state, sink);
             return;
         }
         if ("compliance_checker".equals(intent)) {
+            return;
+        }
+        if ("chitchat".equals(intent)) {
+            chitchatAgent.process(state, sink);
             return;
         }
         knowledgeAgent.process(state, sink);
@@ -110,6 +123,9 @@ public class SupervisorAgent {
                 .append(", slots=").append(String.valueOf(working.getOrDefault("slots", "{}")));
         if (!profile.isEmpty()) {
             sb.append("; 用户画像: ").append(profile);
+        }
+        if (state.getArticleSlug() != null && !state.getArticleSlug().isBlank()) {
+            sb.append("; 单文问答范围 slug=").append(state.getArticleSlug());
         }
         state.setMemoryContext(sb.toString());
     }

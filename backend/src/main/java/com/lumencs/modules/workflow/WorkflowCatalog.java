@@ -83,6 +83,40 @@ public final class WorkflowCatalog {
                     ),
                     "tea_order"
             );
+            case "blog_article" -> new WorkflowDef(
+                    "blog_article",
+                    "写博客草稿",
+                    "我会先根据对话生成标题和正文，请你改完再确认。默认只存草稿，不会出现在前台。",
+                    List.of(
+                            new WorkflowSlot("title", "text", "标题", true, List.of()),
+                            new WorkflowSlot("summary", "textarea", "摘要", false, List.of()),
+                            new WorkflowSlot("content", "textarea", "正文（Markdown）", true, List.of()),
+                            new WorkflowSlot("category", "text", "分类", true, List.of()),
+                            new WorkflowSlot("tags", "text", "标签（逗号分隔）", false, List.of()),
+                            new WorkflowSlot("action", "choice", "提交后", true,
+                                    List.of("存草稿", "发布到前台"))
+                    ),
+                    "blog_article_upsert"
+            );
+            case "blog_bookmark" -> new WorkflowDef(
+                    "blog_bookmark",
+                    "添加书签",
+                    "核对链接和分组后再写入博客书签页。书签没有文章标签，只有分组。",
+                    List.of(
+                            new WorkflowSlot("name", "text", "名称", true, List.of()),
+                            new WorkflowSlot("link", "text", "链接", true, List.of()),
+                            new WorkflowSlot("description", "textarea", "备注", false, List.of()),
+                            new WorkflowSlot("category", "text", "书签分组", true, List.of())
+                    ),
+                    "blog_bookmark_create"
+            );
+            case "blog_tag" -> new WorkflowDef(
+                    "blog_tag",
+                    "新建文章标签",
+                    "在博客里创建一个可用于文章的标签。",
+                    List.of(new WorkflowSlot("name", "text", "标签名", true, List.of())),
+                    "blog_tag_create"
+            );
             default -> null;
         };
     }
@@ -126,6 +160,18 @@ public final class WorkflowCatalog {
                 found.put("count", "2");
             } else if (message.contains("一杯") || message.contains("1杯")) {
                 found.putIfAbsent("count", "1");
+            }
+        }
+        if ("blog_bookmark".equals(intent)) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("https?://\\S+").matcher(message);
+            if (matcher.find()) {
+                found.put("link", matcher.group().replaceAll("[)\\],，。]+$", ""));
+            }
+        }
+        if ("blog_tag".equals(intent)) {
+            String name = message.replaceAll(".*(标签|tag)", "").replaceAll("[：:]", "").trim();
+            if (!name.isBlank() && name.length() <= 20) {
+                found.put("name", name);
             }
         }
         return found;

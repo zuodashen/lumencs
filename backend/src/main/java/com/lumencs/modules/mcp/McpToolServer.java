@@ -2,7 +2,6 @@ package com.lumencs.modules.mcp;
 
 import com.lumencs.model.entity.ToolLog;
 import com.lumencs.mapper.ToolLogMapper;
-import com.lumencs.modules.workflow.WorkflowAgent;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +33,7 @@ public class McpToolServer {
     private final TicketService ticketService;
     private final KnowledgeService knowledgeService;
     private final BlogClient blogClient;
+    private final BlogAdminClient blogAdminClient;
     private final AgentTracer tracer;
     private final ToolLogMapper toolLogMapper;
     private final ObjectMapper objectMapper;
@@ -44,12 +44,14 @@ public class McpToolServer {
             TicketService ticketService,
             KnowledgeService knowledgeService,
             BlogClient blogClient,
+            BlogAdminClient blogAdminClient,
             AgentTracer tracer,
             ToolLogMapper toolLogMapper,
             ObjectMapper objectMapper) {
         this.ticketService = ticketService;
         this.knowledgeService = knowledgeService;
         this.blogClient = blogClient;
+        this.blogAdminClient = blogAdminClient;
         this.tracer = tracer;
         this.toolLogMapper = toolLogMapper;
         this.objectMapper = objectMapper;
@@ -61,6 +63,10 @@ public class McpToolServer {
         tools.add(tool("ticket_query", "按工单号查询工单", List.of("ticket_no")));
         tools.add(tool("kb_search", "检索内部知识库", List.of("query")));
         tools.add(tool("blog_search", "检索个人博客已发布文章", List.of("query")));
+        tools.add(tool("blog_get", "按 slug 读取一篇已发布文章", List.of("slug")));
+        tools.add(tool("blog_article_upsert", "卡片确认后写入博客文章（默认草稿）", List.of("title", "summary", "content", "category", "tags", "action")));
+        tools.add(tool("blog_bookmark_create", "卡片确认后添加博客书签", List.of("name", "link", "description", "category")));
+        tools.add(tool("blog_tag_create", "卡片确认后新建文章标签", List.of("name")));
         tools.add(tool("order_query", "查询演示订单（mock）", List.of("order_id")));
         tools.add(tool("tea_order", "工位奶茶下单（演示）", List.of("drink", "size", "sweetness", "ice", "topping", "count", "desk")));
         return tools;
@@ -86,7 +92,7 @@ public class McpToolServer {
         logEntry.put("success", success);
         logEntry.put("durationMs", duration);
         logEntry.put("time", LocalDateTime.now().toString());
-        logEntry.put("args", args);
+        logEntry.put("args", redactArgs(args));
         callLog.add(0, logEntry);
         if (callLog.size() > 100) {
             callLog.remove(callLog.size() - 1);
@@ -113,8 +119,12 @@ public class McpToolServer {
             ToolLog toolLog = new ToolLog();
             toolLog.setSessionId(sessionId);
             toolLog.setTool(name);
-            toolLog.setArgumentsJson(objectMapper.writeValueAsString(args == null ? Map.of() : args));
-            toolLog.setResultJson(objectMapper.writeValueAsString(result));
+            toolLog.setArgumentsJson(objectMapper.writeValueAsString(redactArgs(args)));
+            String resultJson = objectMapper.writeValueAsString(redactArgs(result));
+            if (resultJson.length() > 4000) {
+                resultJson = resultJson.substring(0, 4000) + "...[truncated]";
+            }
+            toolLog.setResultJson(resultJson);
             toolLog.setSuccess(success);
             toolLog.setDurationMs(duration);
             toolLog.setCreatedAt(LocalDateTime.now());
@@ -122,6 +132,23 @@ public class McpToolServer {
         } catch (JsonProcessingException | RuntimeException e) {
             log.warn("persist tool log failed: {}", e.getMessage());
         }
+    }
+
+    private Map<String, Object> redactArgs(Map<String, Object> args) {
+        if (args == null || args.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Object> copy = new LinkedHashMap<>(args);
+        Object content = copy.get("content");
+        if (content != null) {
+            String text = content.toString();
+            if (text.length() > 160) {
+                copy.put("content", "[redacted " + text.length() + " chars]");
+            }
+        }
+        copy.remove("password");
+        copy.remove("confirmToken");
+        return copy;
     }
 
     private Map<String, Object> dispatch(String name, Map<String, Object> args) {
@@ -155,6 +182,10 @@ public class McpToolServer {
                 yield Map.of("success", true, "hits", hits);
             }
             case "blog_search" -> Map.of("success", true, "articles", blogClient.search(str(args, "query")));
+            case "blog_get" -> Map.of("success", true, "article", blogClient.getArticle(str(args, "slug")));
+            case "blog_article_upsert" -> blogArticle(args);
+            case "blog_bookmark_create" -> blogBookmark(args);
+            case "blog_tag_create" -> blogTag(args);
             case "order_query" -> {
                 String orderId = str(args, "order_id");
                 yield Map.of(
@@ -168,6 +199,58 @@ public class McpToolServer {
             case "tea_order" -> teaOrder(args);
             default -> Map.of("success", false, "error", "unknown tool: " + name);
         };
+    }
+
+    private Map<String, Object> blockedWrite() {
+        return Map.of("success", false, "error", blogAdminClient.writeBlockedReason());
+    }
+
+    private Map<String, Object> blogArticle(Map<String, Object> args) {
+        if (!blogAdminClient.writeReady()) {
+            return blockedWrite();
+        }
+        boolean publish = str(args, "action").contains("发布");
+        Map<String, Object> result = blogAdminClient.createArticle(
+                str(args, "title"),
+                str(args, "summary"),
+                str(args, "content"),
+                str(args, "category"),
+                str(args, "tags"),
+                publish
+        );
+        if (publish && result.get("slug") != null) {
+            try {
+                knowledgeService.upsertBlog(
+                        str(args, "title"),
+                        String.valueOf(result.get("slug")),
+                        str(args, "content")
+                );
+                result.put("ingested", true);
+            } catch (Exception e) {
+                log.warn("blog ingest after publish failed: {}", e.getMessage());
+                result.put("ingested", false);
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> blogBookmark(Map<String, Object> args) {
+        if (!blogAdminClient.writeReady()) {
+            return blockedWrite();
+        }
+        return blogAdminClient.createBookmark(
+                str(args, "name"),
+                str(args, "link"),
+                str(args, "description"),
+                str(args, "category")
+        );
+    }
+
+    private Map<String, Object> blogTag(Map<String, Object> args) {
+        if (!blogAdminClient.writeReady()) {
+            return blockedWrite();
+        }
+        return blogAdminClient.createTag(str(args, "name"));
     }
 
     private Map<String, Object> teaOrder(Map<String, Object> args) {

@@ -40,7 +40,7 @@ export type AgentStep = {
 
 export type CardField = {
   name: string
-  type: 'text' | 'choice' | string
+    type: 'text' | 'choice' | 'textarea' | string
   label: string
   required: boolean
   options: string[]
@@ -49,6 +49,7 @@ export type CardField = {
 
 export type WorkflowCard = {
   cardId: string
+  confirmToken?: string
   workflow: string
   title: string
   hint: string
@@ -63,6 +64,9 @@ export type ChatResult = {
   citations: Citation[]
   ticketNo?: string
   waitingCard?: boolean
+  messageId?: number
+  reviewPending?: boolean
+  reviewId?: number
 }
 
 export type LoginResult = {
@@ -99,11 +103,15 @@ function clearTokens() {
   localStorage.removeItem(REFRESH_KEY)
 }
 
-function unwrap<T>(json: { state?: number; code?: number; data?: T; msg?: string; message?: string }): T {
+function unwrap<T>(json: { state?: number; code?: number; data?: T; msg?: string; message?: string; error?: string }): T {
   if (json.state === 200 || json.code === 0) {
     return json.data as T
   }
-  throw new Error(json.msg || json.message || '请求失败')
+  const text = json.msg || json.message || json.error
+  if (json.state === 401 || json.state === 403 || text === 'Forbidden' || text === 'Unauthorized') {
+    throw new Error('登录已过期，请重新登录')
+  }
+  throw new Error(text || '请求失败')
 }
 
 async function parseSseStream(res: Response, handler: SseHandler) {
@@ -135,25 +143,54 @@ async function parseSseStream(res: Response, handler: SseHandler) {
   }
 }
 
-export async function streamChat(payload: { sessionId?: string; userLabel?: string; message: string }, handler: SseHandler) {
+function chatHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  }
+  const token = getToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
+
+export async function streamChat(
+  payload: { sessionId?: string; userLabel?: string; message: string; articleSlug?: string },
+  handler: SseHandler,
+) {
   const res = await fetch(`${API_BASE}/api/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers: chatHeaders(),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
     throw new Error('聊天请求失败')
   }
-  await parseSseStream(res, handler)
+  try {
+    await parseSseStream(res, handler)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : ''
+    if (/network error|failed to fetch/i.test(msg)) {
+      throw new Error('对话连接被中断。请看页面是否已提示密钥问题；否则检查后端日志里的 dmx_api_error。')
+    }
+    throw e
+  }
 }
 
 export async function streamCard(
-  payload: { sessionId?: string; userLabel?: string; cardId: string; values: Record<string, unknown> },
+  payload: {
+    sessionId?: string
+    userLabel?: string
+    cardId: string
+    confirmToken?: string
+    values: Record<string, unknown>
+  },
   handler: SseHandler,
 ) {
   const res = await fetch(`${API_BASE}/api/chat/card`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers: chatHeaders(),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
@@ -192,10 +229,14 @@ async function adminFetch(path: string, init: RequestInit = {}, retried = false)
     headers.set('Content-Type', 'application/json')
   }
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
-  if (res.status === 401 && !retried) {
+  if ((res.status === 401 || res.status === 403) && !retried) {
     const ok = await refreshAccessToken()
     if (ok) {
       return adminFetch(path, init, true)
+    }
+    clearTokens()
+    if (!window.location.pathname.includes('/console/login')) {
+      window.location.href = '/console/login'
     }
     throw new Error('登录已过期，请重新登录')
   }
@@ -220,6 +261,7 @@ export const api = {
     adminFetch(`/api/admin/knowledge?pageNum=${pageNum}&pageSize=${pageSize}`),
   createDocument: (body: { title: string; source?: string; content: string }) =>
     adminFetch('/api/admin/knowledge', { method: 'POST', body: JSON.stringify(body) }),
+  reindexKnowledge: () => adminFetch('/api/admin/knowledge/reindex', { method: 'POST' }),
   tickets: (query: PageQuery & { status?: string } = {}) => {
     const params = new URLSearchParams()
     params.set('pageNum', String(query.pageNum ?? 1))
@@ -252,6 +294,31 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, note: note || '' }),
     }),
+  history: (sessionId: string) =>
+    fetch(`${API_BASE}/api/chat/${encodeURIComponent(sessionId)}/messages`).then(async (res) => {
+      const json = await res.json()
+      return Array.isArray(json) ? json : unwrap<any[]>(json)
+    }),
+  scope: (slug: string) =>
+    fetch(`${API_BASE}/api/hub/scope?slug=${encodeURIComponent(slug)}`).then(async (res) => {
+      const json = await res.json()
+      return unwrap<{ slug: string; ready: boolean; title: string }>(json)
+    }),
+  feedback: (body: { sessionId: string; messageId: number; score: 'UP' | 'DOWN'; cited?: boolean; comment?: string }) =>
+    fetch(`${API_BASE}/api/chat/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(async (res) => unwrap(await res.json())),
+  hubOverview: () => adminFetch('/api/admin/hub/overview'),
+  inbox: () => adminFetch('/api/admin/hub/inbox'),
+  markInboxRead: (id: number) => adminFetch(`/api/admin/hub/inbox/${id}/read`, { method: 'POST' }),
+  gaps: () => adminFetch('/api/admin/hub/gaps'),
+  faqDraft: (body: { sessionId: string; messageId?: number }) =>
+    adminFetch('/api/admin/hub/faq-draft', { method: 'POST', body: JSON.stringify(body) }),
+  channels: () => adminFetch('/api/admin/hub/channels'),
+  saveWebhook: (body: { name?: string; url: string; enabled?: boolean }) =>
+    adminFetch('/api/admin/hub/channels/webhook', { method: 'POST', body: JSON.stringify(body) }),
 }
 
 export function logoutTokens() {

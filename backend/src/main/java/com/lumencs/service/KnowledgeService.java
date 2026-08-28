@@ -6,6 +6,7 @@ import com.lumencs.model.entity.KbDocument;
 import com.lumencs.mapper.KbDocumentMapper;
 import com.lumencs.knowledge.TextChunker;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lumencs.exception.BizException;
 import com.lumencs.rag.RagClient;
 import com.lumencs.rag.RagHit;
 import org.slf4j.Logger;
@@ -14,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -63,7 +63,34 @@ public class KnowledgeService {
         doc.setStatus("INDEXING");
         doc.setChunkCount(0);
         documentMapper.insert(doc);
+        indexChunks(doc, content);
+        return doc;
+    }
 
+    /** 换 embedding 模型/维度后，用库里已有正文重新切分并写入 Qdrant。 */
+    @Transactional
+    public int reindexAll() {
+        int n = 0;
+        for (KbDocument doc : listDocuments()) {
+            reindex(doc.getId());
+            n++;
+        }
+        return n;
+    }
+
+    @Transactional
+    public KbDocument reindex(Long id) {
+        KbDocument doc = documentMapper.selectById(id);
+        if (doc == null) {
+            throw new BizException("文档不存在");
+        }
+        ragClient.deleteDocument(id);
+        chunkMapper.delete(new LambdaQueryWrapper<KbChunk>().eq(KbChunk::getDocumentId, id));
+        indexChunks(doc, doc.getContent());
+        return doc;
+    }
+
+    private void indexChunks(KbDocument doc, String content) {
         List<String> parts = TextChunker.chunk(content, 512, 80);
         List<KbChunk> chunks = new ArrayList<>();
         List<Map<String, Object>> points = new ArrayList<>();
@@ -99,24 +126,56 @@ public class KnowledgeService {
             doc.setStatus("KEYWORD_ONLY");
         }
         documentMapper.updateById(doc);
-        return doc;
     }
 
     public List<RagHit> search(String query) {
+        return search(query, null);
+    }
+
+    public KbDocument findByBlogSlug(String slug) {
+        if (slug == null || slug.isBlank()) {
+            return null;
+        }
+        return documentMapper.selectOne(new LambdaQueryWrapper<KbDocument>()
+                .eq(KbDocument::getSource, "blog:" + slug.trim())
+                .last("LIMIT 1"));
+    }
+
+    /** 发布后把正文写入本仓知识库；已有 blog:{slug} 则覆盖再切分。草稿不入库，避免公聊检索到未发布内容。 */
+    @Transactional
+    public KbDocument upsertBlog(String title, String slug, String content) {
+        KbDocument existing = findByBlogSlug(slug);
+        if (existing == null) {
+            return ingest(title, "blog:" + slug.trim(), content);
+        }
+        existing.setTitle(title);
+        existing.setContent(content);
+        documentMapper.updateById(existing);
+        ragClient.deleteDocument(existing.getId());
+        chunkMapper.delete(new LambdaQueryWrapper<KbChunk>().eq(KbChunk::getDocumentId, existing.getId()));
+        indexChunks(existing, content);
+        return existing;
+    }
+
+    public List<RagHit> search(String query, Long documentId) {
         try {
-            List<RagHit> hits = ragClient.search(query, topK);
+            List<RagHit> hits = ragClient.search(query, topK, documentId);
             if (!hits.isEmpty()) {
                 return hits;
             }
         } catch (Exception e) {
             log.warn("vector search failed, fallback to keyword", e);
         }
-        return keywordSearch(query);
+        return keywordSearch(query, documentId);
     }
 
-    private List<RagHit> keywordSearch(String query) {
+    private List<RagHit> keywordSearch(String query, Long documentId) {
         Set<String> terms = Set.of(query.toLowerCase().split("[\\s,，。！？?]+"));
-        List<KbChunk> chunks = chunkMapper.selectList(null);
+        LambdaQueryWrapper<KbChunk> wrapper = new LambdaQueryWrapper<>();
+        if (documentId != null) {
+            wrapper.eq(KbChunk::getDocumentId, documentId);
+        }
+        List<KbChunk> chunks = chunkMapper.selectList(wrapper);
         return chunks.stream()
                 .map(chunk -> {
                     String content = chunk.getContent().toLowerCase();

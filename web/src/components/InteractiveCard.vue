@@ -27,14 +27,14 @@ function submit() {
 </script>
 
 <template>
-  <div class="mt-2 rounded-xl border border-[#3dd6c6]/40 bg-[#0f1728] p-4">
-    <p class="text-sm font-medium text-[#3dd6c6]">{{ card.title }}</p>
-    <p class="mt-1 text-xs text-[#8b9bb8]">{{ card.hint }} · 可点选，也可直接输入</p>
+  <div class="mt-2 rounded-2xl border border-[var(--accent)]/35 bg-[var(--bg-elev)] p-4">
+    <p class="text-sm font-medium text-[var(--accent)]">{{ card.title }}</p>
+    <p class="muted mt-1 text-xs">{{ card.hint }} · 可点选，也可手输</p>
     <div class="mt-3 space-y-3">
       <div v-for="field in card.fields" :key="field.name">
-        <p class="mb-1 text-xs text-[#8b9bb8]">
+        <p class="mb-1 text-xs muted">
           {{ field.label }}
-          <span v-if="field.required" class="text-[#f07178]">*</span>
+          <span v-if="field.required" class="danger">*</span>
         </p>
         <div v-if="field.type === 'choice'" class="flex flex-wrap gap-2">
           <button
@@ -42,28 +42,31 @@ function submit() {
             :key="opt"
             type="button"
             class="rounded-full border px-3 py-1 text-xs"
-            :class="values[field.name] === opt ? 'border-[#3dd6c6] bg-[#3dd6c6]/15 text-[#3dd6c6]' : 'border-[#243049] text-[#c5d0e6]'"
+            :class="values[field.name] === opt ? 'border-[var(--accent)] bg-[var(--accent-dim)] text-[var(--accent)]' : 'border-[var(--line)]'"
             :disabled="disabled"
             @click="pick(field.name, opt)"
           >
             {{ opt }}
           </button>
         </div>
+        <div v-if="field.type === 'textarea'">
+          <textarea
+            v-model="values[field.name]"
+            class="input mt-1 min-h-40 font-mono text-xs leading-relaxed"
+            rows="10"
+            placeholder="可直接改 AI 起草的内容"
+            :disabled="disabled"
+          />
+        </div>
         <input
+          v-else
           v-model="values[field.name]"
-          class="mt-1 w-full rounded-lg border border-[#243049] bg-[#0b1220] px-3 py-2 text-sm outline-none"
+          class="input mt-1"
           :placeholder="field.type === 'choice' ? '也可手动输入' : '请填写'"
           :disabled="disabled"
         />
       </div>
     </div>
-    <button
-      type="button"
-      class="mt-4 rounded-lg bg-[#3dd6c6] px-4 py-2 text-sm font-medium text-[#0b1220]"
-      :disabled="disabled"
-      @click="submit"
-    >
-      确认提交
-    </button>
+    <button type="button" class="btn-primary mt-4" :disabled="disabled" @click="submit">确认提交</button>
   </div>
 </template>

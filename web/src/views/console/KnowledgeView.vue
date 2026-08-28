@@ -11,6 +11,7 @@ const source = ref('')
 const content = ref('')
 const error = ref('')
 const saving = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 const maxPage = () => Math.max(1, Math.ceil(total.value / pageSize))
 
@@ -51,6 +52,45 @@ async function syncBlog() {
   }
 }
 
+async function reindex() {
+  error.value = ''
+  saving.value = true
+  try {
+    const data = await api.reindexKnowledge()
+    await load()
+    error.value = data?.reindexed != null ? `已重新向量化 ${data.reindexed} 篇` : ''
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '重新向量化失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+function onFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  if (!['txt', 'md', 'markdown', 'csv', 'json', 'log'].includes(ext)) {
+    error.value = '目前只解析纯文本：.txt / .md / .csv / .json（PDF、Word 尚未接入）'
+    input.value = ''
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    error.value = '文件请小于 2MB'
+    input.value = ''
+    return
+  }
+  error.value = ''
+  const reader = new FileReader()
+  reader.onload = () => {
+    content.value = String(reader.result || '')
+    if (!title.value) title.value = file.name.replace(/\.[^.]+$/, '')
+    if (!source.value) source.value = file.name
+  }
+  reader.readAsText(file, 'UTF-8')
+}
+
 async function submit() {
   error.value = ''
   saving.value = true
@@ -59,6 +99,7 @@ async function submit() {
     title.value = ''
     source.value = ''
     content.value = ''
+    if (fileInput.value) fileInput.value = ''
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '保存失败'
@@ -71,32 +112,39 @@ async function submit() {
 <template>
   <div class="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
     <section>
-      <h1 class="mb-4 text-xl font-semibold">知识库</h1>
+      <h1 class="serif mb-4 text-3xl">知识库</h1>
       <div class="space-y-3">
-        <article v-for="doc in docs" :key="doc.id" class="rounded-xl border border-[#243049] bg-[#121a2b] p-4">
+        <article v-for="doc in docs" :key="doc.id" class="panel p-4">
           <p class="font-medium">{{ doc.title }}</p>
-          <p class="mt-1 text-xs text-[#8b9bb8]">{{ doc.source }} · {{ doc.status }} · {{ doc.chunkCount }} chunks</p>
+          <p class="muted mt-1 text-xs">{{ doc.source }} · {{ doc.status }} · {{ doc.chunkCount }} chunks</p>
         </article>
-        <p v-if="!docs.length" class="text-sm text-[#8b9bb8]">暂无文档</p>
-        <div class="flex items-center gap-3 pt-1 text-xs text-[#8b9bb8]">
-          <button class="rounded border border-[#243049] px-3 py-1" :disabled="pageNum <= 1" @click="go(pageNum - 1)">
-            上一页
-          </button>
+        <p v-if="!docs.length" class="muted text-sm">暂无文档</p>
+        <div class="muted flex items-center gap-3 pt-1 text-xs">
+          <button class="btn-ghost" :disabled="pageNum <= 1" @click="go(pageNum - 1)">上一页</button>
           <span>第 {{ pageNum }} / {{ maxPage() }} 页 · 共 {{ total }} 篇</span>
-          <button class="rounded border border-[#243049] px-3 py-1" :disabled="pageNum >= maxPage()" @click="go(pageNum + 1)">
-            下一页
-          </button>
+          <button class="btn-ghost" :disabled="pageNum >= maxPage()" @click="go(pageNum + 1)">下一页</button>
         </div>
       </div>
     </section>
-    <form class="rounded-xl border border-[#243049] bg-[#121a2b] p-4" @submit.prevent="submit">
-      <h2 class="mb-3 font-medium">新增文档</h2>
-      <input v-model="title" class="mb-3 w-full rounded-lg border border-[#243049] bg-[#0b1220] px-3 py-2 text-sm" placeholder="标题" />
-      <input v-model="source" class="mb-3 w-full rounded-lg border border-[#243049] bg-[#0b1220] px-3 py-2 text-sm" placeholder="来源，如 policy.md" />
-      <textarea v-model="content" rows="10" class="mb-3 w-full rounded-lg border border-[#243049] bg-[#0b1220] px-3 py-2 text-sm" placeholder="正文" />
-      <p v-if="error" class="mb-3 text-sm text-[#f07178]">{{ error }}</p>
-      <button class="rounded-lg bg-[#3dd6c6] px-4 py-2 text-sm font-medium text-[#0b1220]" :disabled="saving">写入并向量化</button>
-      <button type="button" class="ml-2 rounded-lg border border-[#243049] px-4 py-2 text-sm" @click="syncBlog">从博客同步</button>
+    <form class="panel p-4" @submit.prevent="submit">
+      <h2 class="serif mb-3 text-xl">新增文档</h2>
+      <p class="muted mb-3 text-sm leading-relaxed">
+        粘贴正文，或上传纯文本文件。浏览器读成文字后走同一条「切分 → 向量化」链路。PDF / Word 暂不解析。
+      </p>
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".txt,.md,.markdown,.csv,.json,.log,text/plain"
+        class="mb-3 block w-full text-sm text-[var(--muted)]"
+        @change="onFile"
+      />
+      <input v-model="title" class="input mb-3" placeholder="标题" />
+      <input v-model="source" class="input mb-3" placeholder="来源，如 policy.md" />
+      <textarea v-model="content" rows="10" class="input mb-3" placeholder="正文" />
+      <p v-if="error" class="danger mb-3 text-sm">{{ error }}</p>
+      <button class="btn-primary" :disabled="saving">写入并向量化</button>
+      <button type="button" class="btn-ghost ml-2" :disabled="saving" @click="syncBlog">从博客同步正文</button>
+      <button type="button" class="btn-ghost ml-2" :disabled="saving" @click="reindex">重新向量化已有文档</button>
     </form>
   </div>
 </template>

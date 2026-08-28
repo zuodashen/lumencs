@@ -32,6 +32,7 @@ class IngestRequest(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
+    document_id: int | None = None
 
 
 class DeleteRequest(BaseModel):
@@ -40,7 +41,12 @@ class DeleteRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "healthy", "service": "rag", "dim": dim}
+    return {
+        "status": "healthy",
+        "service": "rag",
+        "dim": dim,
+        "embedding_model": os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+    }
 
 
 @app.post("/ingest")
@@ -64,7 +70,7 @@ def ingest(req: IngestRequest) -> dict[str, Any]:
 def search(req: SearchRequest) -> dict[str, Any]:
     try:
         query_vec = embedder.embed([req.query])[0]
-        hits = store.search(query_vec, top_k=max(1, req.top_k))
+        hits = store.search(query_vec, top_k=max(1, req.top_k), document_id=req.document_id)
         return {"hits": hits}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"search failed: {exc}") from exc

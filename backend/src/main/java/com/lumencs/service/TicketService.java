@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lumencs.common.PageWrapper;
 import com.lumencs.exception.BizException;
 import com.lumencs.lock.RedisLockService;
+import com.lumencs.notify.NotifyService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,11 +29,14 @@ public class TicketService {
     private final TicketMapper ticketMapper;
     private final StringRedisTemplate redis;
     private final RedisLockService lockService;
+    private final NotifyService notifyService;
 
-    public TicketService(TicketMapper ticketMapper, StringRedisTemplate redis, RedisLockService lockService) {
+    public TicketService(TicketMapper ticketMapper, StringRedisTemplate redis, RedisLockService lockService,
+                         NotifyService notifyService) {
         this.ticketMapper = ticketMapper;
         this.redis = redis;
         this.lockService = lockService;
+        this.notifyService = notifyService;
     }
 
     /** MCP ticket_query 用：按单号在内存中过滤（演示数据量小）。 */
@@ -67,6 +71,12 @@ public class TicketService {
         ticket.setPriority(priority == null ? "MEDIUM" : priority.toUpperCase());
         ticket.setStatus(TicketStatus.CREATED.name());
         ticketMapper.insert(ticket);
+        notifyService.publish(
+                "ticket.created",
+                "ticket.created." + ticket.getTicketNo(),
+                "新工单 " + ticket.getTicketNo(),
+                ticket.getTitle()
+        );
         return ticket;
     }
 
@@ -86,6 +96,14 @@ public class TicketService {
         }
         ticket.setStatus(to.name());
         ticketMapper.updateById(ticket);
+        if (to == TicketStatus.WAITING_HUMAN) {
+            notifyService.publish(
+                    "ticket.waiting",
+                    "ticket.waiting." + ticket.getId(),
+                    "工单转入人工 " + ticket.getTicketNo(),
+                    ticket.getTitle()
+            );
+        }
         return ticket;
     }
 

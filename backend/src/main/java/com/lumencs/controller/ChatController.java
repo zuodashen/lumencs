@@ -6,6 +6,7 @@ import com.lumencs.model.dto.ChatRequest;
 import com.lumencs.model.entity.ChatMessage;
 import com.lumencs.model.vo.MessageVO;
 import com.lumencs.service.ChatService;
+import com.lumencs.security.HubAuth;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -35,14 +36,16 @@ public class ChatController {
     public SseEmitter chat(@Valid @RequestBody ChatRequest request, HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache");
-        return chatService.stream(request.getSessionId(), request.getUserLabel(), request.getMessage());
+        return chatService.stream(request.getSessionId(), request.getUserLabel(), request.getMessage(),
+                request.getArticleSlug(), HubAuth.isAdmin());
     }
 
     @PostMapping(value = "/card", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter card(@Valid @RequestBody CardRequest request, HttpServletResponse response) {
         response.setHeader("X-Accel-Buffering", "no");
         response.setHeader("Cache-Control", "no-cache");
-        return chatService.streamCard(request.getSessionId(), request.getUserLabel(), request.getCardId(), request.getValues());
+        return chatService.streamCard(request.getSessionId(), request.getUserLabel(), request.getCardId(),
+                request.getConfirmToken(), request.getValues(), HubAuth.isAdmin());
     }
 
     @GetMapping("/{sessionId}/messages")

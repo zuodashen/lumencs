@@ -78,9 +78,9 @@ async function decide(item: ReviewItem, action: 'APPROVE' | 'REJECT') {
 
 <template>
   <div>
-    <h1 class="mb-2 text-xl font-semibold">审核收件箱（HITL）</h1>
-    <p class="mb-4 text-sm text-[#8b9bb8]">
-      规则 / LLM 合规不通过的回复进入此队列，通过或驳回后才算处理完成；未通过前不会直接发送给用户。
+    <h1 class="serif mb-2 text-3xl">审核收件箱</h1>
+    <p class="muted mb-4 text-sm">
+      合规未通过的回复在这里处理。通过或驳回后会写回访客会话（刷新或等待轮询即可看到）。备注在通过时会作为改写正文。
     </p>
     <p v-if="error" class="text-[#f07178]">{{ error }}</p>
     <p v-if="notice" class="mb-2 text-[#f07178]">{{ notice }}</p>

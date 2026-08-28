@@ -36,6 +36,43 @@ public class BlogClient {
         return enabled;
     }
 
+    public List<Map<String, Object>> listTags() {
+        return listArray("/api/tags");
+    }
+
+    public List<Map<String, Object>> listCategories() {
+        return listArray("/api/categories");
+    }
+
+    public List<Map<String, Object>> listBookmarkGroups() {
+        return listArray("/api/bookmarks");
+    }
+
+    public Map<String, Object> getArticle(String slug) {
+        if (!enabled || slug == null || slug.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> body = client.get()
+                    .uri("/api/articles/{slug}", slug.trim())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+            if (body == null) {
+                return Map.of();
+            }
+            Object data = body.get("data");
+            if (data instanceof Map<?, ?> article) {
+                Map<String, Object> copy = new java.util.LinkedHashMap<>();
+                article.forEach((k, v) -> copy.put(String.valueOf(k), v));
+                return copy;
+            }
+            return Map.of();
+        } catch (Exception e) {
+            log.warn("blog article skipped: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> search(String query) {
         if (!enabled) {
@@ -66,6 +103,33 @@ public class BlogClient {
             return List.of();
         } catch (Exception e) {
             log.warn("blog search skipped: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> listArray(String path) {
+        if (!enabled) {
+            return List.of();
+        }
+        try {
+            Map<String, Object> body = client.get()
+                    .uri(path)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+            if (body == null) {
+                return List.of();
+            }
+            Object data = body.get("data");
+            if (data instanceof List<?> items) {
+                return items.stream()
+                        .filter(Map.class::isInstance)
+                        .map(item -> (Map<String, Object>) item)
+                        .toList();
+            }
+            return List.of();
+        } catch (Exception e) {
+            log.warn("blog {} skipped: {}", path, e.getMessage());
             return List.of();
         }
     }

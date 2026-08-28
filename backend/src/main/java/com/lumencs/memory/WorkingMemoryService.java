@@ -5,9 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -68,6 +72,47 @@ public class WorkingMemoryService {
         put(sessionId, "slots", slots);
     }
 
+    public String issueConfirm(String sessionId, String cardId, String workflow) {
+        String token = UUID.randomUUID().toString();
+        put(sessionId, "pendingCardId", cardId);
+        put(sessionId, "pendingWorkflow", workflow == null ? "" : workflow);
+        put(sessionId, "pendingConfirmHash", hash(sessionId, cardId, workflow, token));
+        return token;
+    }
+
+    public String peekPendingWorkflow(String sessionId) {
+        return getString(sessionId, "pendingWorkflow");
+    }
+
+    /** 一次性消费。成功返回 workflow id，失败返回 null。 */
+    public String consumeConfirm(String sessionId, String cardId, String token) {
+        if (cardId == null || cardId.isBlank() || token == null || token.isBlank()) {
+            return null;
+        }
+        String pendingId = getString(sessionId, "pendingCardId");
+        String workflow = getString(sessionId, "pendingWorkflow");
+        String stored = getString(sessionId, "pendingConfirmHash");
+        if (stored.isBlank() || !cardId.equals(pendingId)) {
+            return null;
+        }
+        if (!stored.equals(hash(sessionId, cardId, workflow, token))) {
+            return null;
+        }
+        put(sessionId, "pendingConfirmHash", "");
+        put(sessionId, "pendingCardId", "");
+        return workflow;
+    }
+
+    private static String hash(String sessionId, String cardId, String workflow, String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String raw = sessionId + "|" + cardId + "|" + (workflow == null ? "" : workflow) + "|" + token;
+            return HexFormat.of().formatHex(digest.digest(raw.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("sha-256 unavailable", e);
+        }
+    }
+
     public Map<String, Object> snapshot(String sessionId) {
         Map<String, Object> snap = new HashMap<>();
         snap.put("intent", getString(sessionId, "intent"));
@@ -80,6 +125,8 @@ public class WorkingMemoryService {
     public void clearWorkflow(String sessionId) {
         put(sessionId, "workflow", "");
         put(sessionId, "pendingCardId", "");
+        put(sessionId, "pendingWorkflow", "");
+        put(sessionId, "pendingConfirmHash", "");
         put(sessionId, "slots", Map.of());
     }
 

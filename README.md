@@ -16,6 +16,7 @@ Java 21 编排主链路 + Python RAG sidecar + Vue 3 单页控制台。面向金
 ## 能力
 
 - 流式聊天：意图路由（**带置信度，低则澄清**）→ 知识 RAG 或 **办事流程卡片** → MCP 工具真调用 → 规则+**LLM 合规**（不通过进 **HITL 收件箱**）→ 汇总
+- 聊天写博客：需先登录中枢；模型起草 Markdown，卡片一次性令牌确认后再调 LightDiary 管理 API（默认草稿）
 - 知识问答 **SSE token 逐字输出**（网关不支持流式则回退整段）
 - **RAG 完整链路**：LLM Query 改写 → Python/Qdrant 向量 Top8 → LLM 重排 Top3 → 生成 + **引用可点**（点击展开原文）；向量服务不可用时降级关键词检索
 - 办事卡片：加班点奶茶；再次「再来一杯」用长期画像预填
@@ -27,15 +28,28 @@ Java 21 编排主链路 + Python RAG sidecar + Vue 3 单页控制台。面向金
 - 统一响应 `R{state,msg,data,traceId}`；traceId 贯穿日志与响应头；context-path `/lumencs-api`
 - OpenAPI：Knife4j `/doc.html` 与 springdoc `/swagger-ui.html`
 
+## 模型网关（聊天 ≠ 向量）
+
+两套 OpenAI 兼容接口，**不要混用一把 Key**：
+
+| 用途 | 网关 | 环境变量 | 本机当前值 |
+| --- | --- | --- | --- |
+| 聊天 / 意图 / RAG 改写与重排 / 合规 / 闲聊 | [DMX API](https://www.dmxapi.com) 国际站 | `OPENAI_API_KEY` · `OPENAI_BASE_URL` · `MODEL_NAME` | `https://www.dmxapi.com` + `deepseek-v4-flash` |
+| 向量化（入库 + 检索） | [硅基流动](https://api.siliconflow.cn) | `EMBEDDING_API_KEY` · `EMBEDDING_BASE_URL` · `EMBEDDING_MODEL` · `EMBEDDING_DIM` | `https://api.siliconflow.cn` + `BAAI/bge-m3`（1024 维） |
+
+Java 只打聊天网关；Python `rag-service` 只打向量网关。根地址都 **不要带 `/v1`**。DMX 令牌必须和站点配套（Global Key ↔ `.com`，国内站 ↔ `.cn`）；`MODEL_NAME` 必须是该 Key 允许的模型。换 embedding 维度后要在控制台重新向量化。验收：`GET http://localhost:8100/health` 应看到 `"embedding_model":"BAAI/bge-m3","dim":1024`。
+
 ## 本地启动
 
-需要：Docker、一个 OpenAI 兼容 API Key（Chat + Embeddings）。
+需要：Docker、一份按上表填好的 `.env`（聊天一把 Key、向量一把 Key）。
 
 本机 `mvn` 需要 **JDK 21**。若机器上只有 JDK 8，请使用 `docker compose up --build`。
 
+**已有 OrbStack / Docker 数据卷怎么增量更新、表怎么补、如何验收**：见 [docs/deployment.md](docs/deployment.md)。
+
 ```bash
 cp .env.example .env
-# 编辑 .env，至少填写 OPENAI_API_KEY；中转网关填写 OPENAI_BASE_URL（不要带 /v1）
+# 填 OPENAI_*（DMX）和 EMBEDDING_*（硅基流动）；根地址不要带 /v1
 
 docker compose up -d --build
 ```

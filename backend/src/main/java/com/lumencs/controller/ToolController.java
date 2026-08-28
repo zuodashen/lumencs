@@ -1,5 +1,6 @@
 package com.lumencs.controller;
 
+import com.lumencs.modules.mcp.BlogAdminClient;
 import com.lumencs.modules.mcp.BlogClient;
 import com.lumencs.modules.mcp.McpToolServer;
 import com.lumencs.common.R;
@@ -16,10 +17,12 @@ public class ToolController {
 
     private final McpToolServer mcpToolServer;
     private final BlogClient blogClient;
+    private final BlogAdminClient blogAdminClient;
 
-    public ToolController(McpToolServer mcpToolServer, BlogClient blogClient) {
+    public ToolController(McpToolServer mcpToolServer, BlogClient blogClient, BlogAdminClient blogAdminClient) {
         this.mcpToolServer = mcpToolServer;
         this.blogClient = blogClient;
+        this.blogAdminClient = blogAdminClient;
     }
 
     @GetMapping
@@ -28,6 +31,7 @@ public class ToolController {
         body.put("tools", mcpToolServer.listTools());
         body.put("recentLogs", mcpToolServer.recentLogs());
         body.put("blogEnabled", blogClient.enabled());
+        body.put("blogWriteEnabled", blogAdminClient.writeReady());
         return R.success(body);
     }
 }

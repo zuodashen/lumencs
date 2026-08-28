@@ -9,4 +9,6 @@ public class ChatRequest {
     private String userLabel;
     @NotBlank
     private String message;
+    /** 可选：lightdiary 文章 slug，检索限定在该文 */
+    private String articleSlug;
 }

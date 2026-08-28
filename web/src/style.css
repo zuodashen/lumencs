@@ -2,24 +2,90 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b1220;
-  --panel: #121a2b;
-  --line: #243049;
-  --text: #e8eefc;
-  --muted: #8b9bb8;
-  --accent: #3dd6c6;
-  --danger: #f07178;
+  --bg: #0b0c0a;
+  --bg-elev: #121410;
+  --panel: #161814;
+  --line: #2c2f28;
+  --text: #f3eee4;
+  --muted: #9b9588;
+  --accent: #d4a574;
+  --accent-dim: #d4a57422;
+  --sage: #8fafa0;
+  --danger: #d97870;
+  --user: #1e221c;
 }
 
 html,
 body,
 #app {
   min-height: 100%;
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 600px at 8% -10%, #2a2418 0%, transparent 55%),
+    radial-gradient(800px 400px at 100% 0%, #1a2420 0%, transparent 45%),
+    var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Outfit", ui-sans-serif, system-ui, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+h1, h2, .serif {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
+
+* { box-sizing: border-box; }
+
+.panel {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border-radius: 1.1rem;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #1a140c;
+  font-weight: 600;
+  border-radius: 0.7rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.btn-primary:disabled { opacity: 0.5; }
+
+.btn-ghost {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 0.7rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8rem;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  outline: none;
+}
+
+.input:focus { border-color: var(--accent); }
+
+.muted { color: var(--muted); }
+.accent { color: var(--accent); }
+.danger { color: var(--danger); }
+
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #3a3d34; border-radius: 8px; }

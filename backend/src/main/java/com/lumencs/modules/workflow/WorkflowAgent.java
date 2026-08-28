@@ -4,6 +4,7 @@ import com.lumencs.agent.AgentEventSink;
 import com.lumencs.agent.AgentState;
 import com.lumencs.memory.LongTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
+import com.lumencs.modules.blogwrite.BlogDraftComposer;
 import com.lumencs.modules.mcp.McpToolServer;
 import org.springframework.stereotype.Component;
 
@@ -18,14 +19,17 @@ public class WorkflowAgent {
     private final WorkingMemoryService workingMemory;
     private final LongTermMemoryService longTermMemory;
     private final McpToolServer mcpToolServer;
+    private final BlogDraftComposer blogDraftComposer;
 
     public WorkflowAgent(
             WorkingMemoryService workingMemory,
             LongTermMemoryService longTermMemory,
-            McpToolServer mcpToolServer) {
+            McpToolServer mcpToolServer,
+            BlogDraftComposer blogDraftComposer) {
         this.workingMemory = workingMemory;
         this.longTermMemory = longTermMemory;
         this.mcpToolServer = mcpToolServer;
+        this.blogDraftComposer = blogDraftComposer;
     }
 
     public AgentState process(AgentState state, AgentEventSink sink) {
@@ -50,6 +54,19 @@ public class WorkflowAgent {
             workingMemory.put(state.getSessionId(), "slots", slots);
         }
 
+        if (!state.isCardSubmit() && "blog_article".equals(def.id()) && blank(slots.get("content"))) {
+            sink.step("workflow", "draft", Map.of("workflow", def.id()));
+            BlogDraftComposer.ArticleDraft draft = blogDraftComposer.compose(state);
+            fillIfBlank(slots, "title", draft.title());
+            fillIfBlank(slots, "summary", draft.summary());
+            fillIfBlank(slots, "content", draft.content());
+            fillIfBlank(slots, "tags", draft.tags());
+            fillIfBlank(slots, "category", draft.category());
+            fillIfBlank(slots, "action", draft.action());
+            workingMemory.put(state.getSessionId(), "slots", slots);
+            prefilled = true;
+        }
+
         if (!state.isCardSubmit()) {
             emitCard(state, sink, def, slots, prefilled);
             return state;
@@ -65,9 +82,11 @@ public class WorkflowAgent {
         Map<String, Object> args = new LinkedHashMap<>(slots);
         args.put("session_id", state.getSessionId());
         args.put("user_label", state.getUserLabel());
-        args.put("title", def.title());
-        args.put("description", buildDescription(def, slots));
-        args.put("priority", "MEDIUM");
+        if (!def.tool().startsWith("blog_")) {
+            args.put("title", def.title());
+            args.put("description", buildDescription(def, slots));
+            args.put("priority", "MEDIUM");
+        }
         if (slots.containsKey("ticketNo")) {
             args.put("ticket_no", slots.get("ticketNo"));
         }
@@ -93,27 +112,43 @@ public class WorkflowAgent {
         return state;
     }
 
+    private void fillIfBlank(Map<String, Object> slots, String key, String value) {
+        if (blank(slots.get(key)) && value != null && !value.isBlank()) {
+            slots.put(key, value);
+        }
+    }
+
     private void emitCard(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots, boolean prefilled) {
         String cardId = UUID.randomUUID().toString();
-        workingMemory.put(state.getSessionId(), "pendingCardId", cardId);
+        String confirmToken = workingMemory.issueConfirm(state.getSessionId(), cardId, def.id());
         Map<String, Object> card = new LinkedHashMap<>();
         card.put("cardId", cardId);
+        card.put("confirmToken", confirmToken);
         card.put("workflow", def.id());
         card.put("title", def.title());
-        card.put("hint", prefilled ? "已按你上次的口味预填，改一下再确认即可。" : def.hint());
+        String hint = def.hint();
+        if ("blog_article".equals(def.id()) && prefilled) {
+            hint = "已根据对话生成草稿，请改标题和正文后确认。默认存草稿。";
+        } else if (prefilled && !"blog_article".equals(def.id())) {
+            hint = "已按你上次的口味预填，改一下再确认即可。";
+        }
+        card.put("hint", hint);
         card.put("prefilled", prefilled);
-        card.put("fields", def.slots().stream().map(slot -> Map.of(
-                "name", slot.name(),
-                "type", slot.type(),
-                "label", slot.label(),
-                "required", slot.required(),
-                "options", slot.options(),
-                "value", String.valueOf(slots.getOrDefault(slot.name(), ""))
-        )).toList());
+        card.put("fields", def.slots().stream().map(slot -> {
+            Map<String, Object> field = new LinkedHashMap<>();
+            field.put("name", slot.name());
+            field.put("type", slot.type());
+            field.put("label", slot.label());
+            field.put("required", slot.required());
+            field.put("options", slot.options());
+            Object value = slots.getOrDefault(slot.name(), "");
+            field.put("value", value == null || "null".equals(String.valueOf(value)) ? "" : String.valueOf(value));
+            return field;
+        }).toList());
         sink.card(card);
         state.setWaitingCard(true);
-        state.getSubResults().put("workflow", prefilled
-                ? "已按长期记忆预填，请确认卡片。"
+        state.getSubResults().put("workflow", "blog_article".equals(def.id()) && prefilled
+                ? "已生成博客草稿，请在卡片里修改后确认提交。"
                 : def.hint());
         sink.step("workflow", "await_card", Map.of("workflow", def.id(), "prefilled", prefilled));
     }
@@ -155,6 +190,25 @@ public class WorkflowAgent {
                     result.getOrDefault("etaMinutes", 12),
                     result.getOrDefault("total", 0)
             ).strip();
+        }
+        if ("blog_article_upsert".equals(def.tool())) {
+            boolean published = Boolean.TRUE.equals(result.get("published"));
+            String url = String.valueOf(result.getOrDefault("publicUrl", ""));
+            if (published && !url.isBlank() && !"null".equals(url)) {
+                return "已发布到博客前台。\n标题：" + result.getOrDefault("title", "")
+                        + "\n链接：" + url;
+            }
+            return "已写入博客草稿（前台不可见）。\n标题：" + result.getOrDefault("title", "")
+                    + "\n可到管理后台继续编辑发布。";
+        }
+        if ("blog_bookmark_create".equals(def.tool())) {
+            return "已添加书签「" + result.getOrDefault("name", "") + "」→ "
+                    + result.getOrDefault("link", "");
+        }
+        if ("blog_tag_create".equals(def.tool())) {
+            return Boolean.FALSE.equals(result.get("created"))
+                    ? "标签已存在，已复用「" + result.getOrDefault("name", "") + "」。"
+                    : "已新建文章标签「" + result.getOrDefault("name", "") + "」。";
         }
         return def.title() + " 查询结果：" + result;
     }

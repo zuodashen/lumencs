@@ -33,4 +33,8 @@ public class AgentState {
     private boolean reviewPending;
     private boolean waitingCard;
     private boolean cardSubmit;
+    /** 博客单文问答：限定 RAG 在该 slug 对应文档内 */
+    private String articleSlug;
+    /** 已登录中枢控制台（ROLE_ADMIN），允许写博客工具 */
+    private boolean hubOperator;
 }

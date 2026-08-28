@@ -25,7 +25,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 class="mb-2 text-xl font-semibold">记忆模块</h1>
+    <h1 class="serif mb-2 text-3xl">记忆</h1>
     <p class="mb-4 text-sm text-[#8b9bb8]">工作槽位、短期对话、长期画像（口味/工位预填）+ 知识库。</p>
     <div class="mb-4 flex gap-2">
       <input v-model="sessionId" class="flex-1 rounded-lg border border-[#243049] bg-[#0b1220] px-3 py-2 text-sm" placeholder="sessionId" />

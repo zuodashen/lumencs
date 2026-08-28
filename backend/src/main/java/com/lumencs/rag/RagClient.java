@@ -45,10 +45,16 @@ public class RagClient {
     }
 
     public List<RagHit> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    public List<RagHit> search(String query, int topK, Long documentId) {
         SearchResponse response = ragRestClient.post()
                 .uri("/search")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("query", query, "top_k", topK))
+                .body(documentId == null
+                        ? Map.of("query", query, "top_k", topK)
+                        : Map.of("query", query, "top_k", topK, "document_id", documentId))
                 .retrieve()
                 .body(SearchResponse.class);
         if (response == null || response.hits == null) {

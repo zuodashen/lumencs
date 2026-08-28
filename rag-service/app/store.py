@@ -56,15 +56,23 @@ class QdrantStore:
         self.client.upsert(collection_name=COLLECTION, points=payload)
         return len(payload)
 
-    def search(self, vector: list[float], top_k: int) -> list[dict[str, Any]]:
-        results = self.client.search(
+    def search(self, vector: list[float], top_k: int, document_id: int | None = None) -> list[dict[str, Any]]:
+        query_filter = None
+        if document_id is not None:
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+            query_filter = Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            )
+        results = self.client.query_points(
             collection_name=COLLECTION,
-            query_vector=vector,
+            query=vector,
             limit=top_k,
+            query_filter=query_filter,
             with_payload=True,
         )
         hits = []
-        for item in results:
+        for item in results.points:
             hits.append(
                 {
                     "id": str(item.id),

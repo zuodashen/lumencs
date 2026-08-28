@@ -27,7 +27,7 @@ async function load(id: string) {
 <template>
   <div class="grid gap-4 lg:grid-cols-[240px_1fr]">
     <section>
-      <h1 class="mb-3 text-xl font-semibold">追踪</h1>
+      <h1 class="serif mb-3 text-3xl">追踪</h1>
       <p v-if="error" class="text-sm text-[#f07178]">{{ error }}</p>
       <button
         v-for="item in sessions"

@@ -2,7 +2,6 @@ package com.lumencs.service;
 
 import com.lumencs.exception.BizException;
 import com.lumencs.model.entity.KbDocument;
-import com.lumencs.service.KnowledgeService;
 import com.lumencs.modules.mcp.BlogClient;
 import org.springframework.stereotype.Service;
 
@@ -31,17 +30,24 @@ public class BlogSyncService {
                 .map(KbDocument::getSource)
                 .collect(Collectors.toSet());
         int created = 0;
+        int updated = 0;
         for (Map<String, Object> article : articles) {
             String slug = String.valueOf(article.getOrDefault("slug", article.get("id")));
             String source = "blog:" + slug;
+            Map<String, Object> detail = blogClient.getArticle(slug);
+            String title = String.valueOf(detail.getOrDefault("title", article.getOrDefault("title", slug)));
+            String content = String.valueOf(detail.getOrDefault("content",
+                    article.getOrDefault("summary", title)));
             if (existing.contains(source)) {
+                knowledgeService.upsertBlog(title, slug, content);
+                updated++;
                 continue;
             }
-            String title = String.valueOf(article.getOrDefault("title", slug));
-            String summary = String.valueOf(article.getOrDefault("summary", title));
-            knowledgeService.ingest(title, source, summary);
+            knowledgeService.ingest(title, source, content);
             created++;
+            existing.add(source);
         }
-        return Map.of("fetched", articles.size(), "created", created, "skipped", articles.size() - created);
+        return Map.of("fetched", articles.size(), "created", created, "updated", updated,
+                "skipped", Math.max(0, articles.size() - created - updated));
     }
 }

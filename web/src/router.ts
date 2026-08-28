@@ -9,6 +9,9 @@ import TracesView from './views/console/TracesView.vue'
 import MemoryView from './views/console/MemoryView.vue'
 import ToolsView from './views/console/ToolsView.vue'
 import ReviewsView from './views/console/ReviewsView.vue'
+import InboxView from './views/console/InboxView.vue'
+import GapsView from './views/console/GapsView.vue'
+import ChannelsView from './views/console/ChannelsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -22,6 +25,9 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/console/overview' },
         { path: 'overview', component: DashboardView },
+        { path: 'inbox', component: InboxView },
+        { path: 'gaps', component: GapsView },
+        { path: 'channels', component: ChannelsView },
         { path: 'knowledge', component: KnowledgeView },
         { path: 'tickets', component: TicketsView },
         { path: 'traces', component: TracesView },

@@ -13,7 +13,13 @@
                     └─ Qdrant     向量
 ```
 
-编排：`Supervisor → IntentRouter(置信度) → (Workflow卡片 | KnowledgeRAG) → Compliance(规则+LLM) → Synthesize`。
+模型网关（OpenAI 兼容，**聊天与向量拆开**）：
+
+- Java `ChatClient` → DMX `https://www.dmxapi.com`，模型 `deepseek-v4-flash`（意图、闲聊、RAG 改写/重排、合规、博客起草）
+- Python `rag-service` → 硅基流动 `https://api.siliconflow.cn`，模型 `BAAI/bge-m3`，Qdrant 维数 1024
+- 博客写入（可选）→ 需中枢 `ROLE_ADMIN` + LightDiary 管理 API JWT（`BLOG_WRITE_ENABLED`，一次性 confirmToken 确认后才 POST）
+
+编排：`Supervisor → IntentRouter(置信度) → (Workflow卡片 | KnowledgeRAG | 闲聊) → Compliance(规则+LLM) → Synthesize`。
 
 一次访客提问：
 
@@ -23,7 +29,8 @@
 4. Supervisor：意图路由（关键词优先，未命中调 LLM 输出 intent+confidence）→ 置信度低于阈值先澄清，不派发业务 Agent。
 5. 按意图：
    - 知识：LLM Query 改写（可关）→ Python/Qdrant 向量 Top8 → LLM 重排 Top3 → 生成 + 引用（可点展开原文）；sidecar 超时/失败降级关键词检索
-   - 工单/奶茶等办事：抽槽位 → 办事卡片确认 → MCP 工具真调用（`ticket_create` / `ticket_query` / `kb_search` / `blog_search` / `tea_order`）
+   - 工单/奶茶等办事：抽槽位 → 办事卡片（一次性 confirmToken）→ MCP 工具真调用（`ticket_create` / `ticket_query` / `kb_search` / `blog_search` / `blog_get` / `tea_order`）
+   - 写博客/书签/标签：未登录直接回登录提示，不调起草模型；已登录才出确认卡片
    - 安全举报：固定话术 + 紧急工单
 6. 合规：规则快筛（敏感词 + PII 正则，命中直接拦截）→ 通过后 LLM 深审 → 不通过进入 HITL 收件箱（`cs_review`），不直接回复。
 7. 工单：状态机（CREATED → PROCESSING → WAITING_HUMAN → RESOLVED → CLOSED，可 ESCALATED）+ `@Transactional` + Redis 日自增单号（分布式锁防并发撞号）。

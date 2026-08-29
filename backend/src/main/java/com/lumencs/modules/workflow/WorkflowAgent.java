@@ -82,8 +82,8 @@ public class WorkflowAgent {
         Map<String, Object> args = new LinkedHashMap<>(slots);
         args.put("session_id", state.getSessionId());
         args.put("user_label", state.getUserLabel());
-        if (!def.tool().startsWith("blog_")) {
-            args.put("title", def.title());
+        if ("ticket_create".equals(def.tool())) {
+            args.put("title", String.valueOf(slots.getOrDefault("title", def.title())));
             args.put("description", buildDescription(def, slots));
             args.put("priority", "MEDIUM");
         }
@@ -129,7 +129,7 @@ public class WorkflowAgent {
         String hint = def.hint();
         if ("blog_article".equals(def.id()) && prefilled) {
             hint = "已根据对话生成草稿，请改标题和正文后确认。默认存草稿。";
-        } else if (prefilled && !"blog_article".equals(def.id())) {
+        } else if ("milk_tea".equals(def.id()) && prefilled) {
             hint = "已按你上次的口味预填，改一下再确认即可。";
         }
         card.put("hint", hint);
@@ -168,7 +168,7 @@ public class WorkflowAgent {
             return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
         }
         if (result.get("ticketNo") != null) {
-            return def.title() + " 已受理。工单号：" + result.get("ticketNo") + "，当前状态：" + result.getOrDefault("status", "CREATED");
+            return "待办已记下。编号：" + result.get("ticketNo") + "，当前状态：" + result.getOrDefault("status", "CREATED");
         }
         if (result.get("orderNo") != null) {
             return """
@@ -190,6 +190,9 @@ public class WorkflowAgent {
                     result.getOrDefault("etaMinutes", 12),
                     result.getOrDefault("total", 0)
             ).strip();
+        }
+        if ("memo_save".equals(def.tool())) {
+            return "已写入知识库「" + result.getOrDefault("title", "") + "」。之后可以直接问我。";
         }
         if ("blog_article_upsert".equals(def.tool())) {
             boolean published = Boolean.TRUE.equals(result.get("published"));

@@ -63,7 +63,7 @@ docker compose up -d --build
 - OpenAPI：http://localhost:8090/lumencs-api/doc.html （Knife4j）
 - RAG：http://localhost:8100/health
 
-演示建议：先「加班口渴，帮我点杯奶茶」下单，再点「再来一杯，送到老工位」看记忆预填。问产品时回答会逐字流出；问「保证收益 100%」会触发合规拦截 / HITL 审核；连发多条消息可看限流。
+演示建议：先「帮我记一下：生椰拿铁少糖」写入知识库，再问「我常喝什么」。点奶茶是保留的演示流程。写博客请先登录控制台。
 
 建表：Docker 首次启动 MySQL 会自动执行 `deploy/sql/schema.sql`；已有库以你手工执行为准（**不集成 Flyway**）。`cs_review`（HITL）、`cs_tool_log`（工具日志）为新增表，升级时请执行增量建表语句。
 

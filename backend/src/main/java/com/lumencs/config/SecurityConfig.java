@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/health", "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat", "/api/chat/card", "/api/chat/feedback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/chat/**", "/api/hub/**").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/chat/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/doc.html").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().permitAll())

@@ -15,6 +15,7 @@ public class DocumentVO {
     private String source;
     private String status;
     private Integer chunkCount;
+    private Integer charCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -25,6 +26,7 @@ public class DocumentVO {
         vo.setSource(doc.getSource());
         vo.setStatus(doc.getStatus());
         vo.setChunkCount(doc.getChunkCount());
+        vo.setCharCount(doc.getContent() == null ? 0 : doc.getContent().length());
         vo.setCreatedAt(doc.getCreatedAt());
         vo.setUpdatedAt(doc.getUpdatedAt());
         return vo;

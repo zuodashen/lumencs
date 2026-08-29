@@ -56,6 +56,11 @@ public class KnowledgeService {
 
     @Transactional
     public KbDocument ingest(String title, String source, String content) {
+        return ingest(title, source, content, TextChunker.Options.defaults());
+    }
+
+    @Transactional
+    public KbDocument ingest(String title, String source, String content, TextChunker.Options options) {
         KbDocument doc = new KbDocument();
         doc.setTitle(title);
         doc.setSource(source == null || source.isBlank() ? title : source);
@@ -63,7 +68,7 @@ public class KnowledgeService {
         doc.setStatus("INDEXING");
         doc.setChunkCount(0);
         documentMapper.insert(doc);
-        indexChunks(doc, content);
+        indexChunks(doc, content, options);
         return doc;
     }
 
@@ -86,20 +91,20 @@ public class KnowledgeService {
         }
         ragClient.deleteDocument(id);
         chunkMapper.delete(new LambdaQueryWrapper<KbChunk>().eq(KbChunk::getDocumentId, id));
-        indexChunks(doc, doc.getContent());
+        indexChunks(doc, doc.getContent(), TextChunker.Options.defaults());
         return doc;
     }
 
-    private void indexChunks(KbDocument doc, String content) {
-        List<String> parts = TextChunker.chunk(content, 512, 80);
+    private void indexChunks(KbDocument doc, String content, TextChunker.Options options) {
+        List<TextChunker.Piece> parts = TextChunker.split(content, options);
         List<KbChunk> chunks = new ArrayList<>();
         List<Map<String, Object>> points = new ArrayList<>();
         int order = 0;
-        for (String part : parts) {
+        for (TextChunker.Piece part : parts) {
             KbChunk chunk = new KbChunk();
             chunk.setId(UUID.randomUUID().toString());
             chunk.setDocumentId(doc.getId());
-            chunk.setContent(part);
+            chunk.setContent(part.context());
             chunk.setSource(doc.getSource());
             chunk.setSortOrder(order++);
             chunkMapper.insert(chunk);
@@ -107,12 +112,12 @@ public class KnowledgeService {
 
             Map<String, Object> payload = new HashMap<>();
             payload.put("document_id", doc.getId());
-            payload.put("content", part);
+            payload.put("content", part.context());
             payload.put("source", doc.getSource());
             payload.put("title", doc.getTitle());
             points.add(Map.of(
                     "id", chunk.getId(),
-                    "text", part,
+                    "text", part.retrieval(),
                     "payload", payload
             ));
         }
@@ -126,6 +131,36 @@ public class KnowledgeService {
             doc.setStatus("KEYWORD_ONLY");
         }
         documentMapper.updateById(doc);
+    }
+
+    public KbDocument getDocument(Long id) {
+        KbDocument doc = documentMapper.selectById(id);
+        if (doc == null) {
+            throw new BizException("文档不存在");
+        }
+        return doc;
+    }
+
+    public List<KbChunk> listChunks(Long documentId) {
+        return chunkMapper.selectList(new LambdaQueryWrapper<KbChunk>()
+                .eq(KbChunk::getDocumentId, documentId)
+                .orderByAsc(KbChunk::getSortOrder));
+    }
+
+    public List<String> preview(String content, TextChunker.Options options) {
+        return TextChunker.preview(content, options);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        KbDocument doc = getDocument(id);
+        try {
+            ragClient.deleteDocument(id);
+        } catch (Exception e) {
+            log.warn("vector delete failed for doc {}: {}", id, e.getMessage());
+        }
+        chunkMapper.delete(new LambdaQueryWrapper<KbChunk>().eq(KbChunk::getDocumentId, id));
+        documentMapper.deleteById(doc.getId());
     }
 
     public List<RagHit> search(String query) {
@@ -153,7 +188,7 @@ public class KnowledgeService {
         documentMapper.updateById(existing);
         ragClient.deleteDocument(existing.getId());
         chunkMapper.delete(new LambdaQueryWrapper<KbChunk>().eq(KbChunk::getDocumentId, existing.getId()));
-        indexChunks(existing, content);
+        indexChunks(existing, content, TextChunker.Options.defaults());
         return existing;
     }
 

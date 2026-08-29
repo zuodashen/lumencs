@@ -67,19 +67,30 @@ public class DataSeeder implements ApplicationRunner {
             return;
         }
         knowledgeService.ingest(
-                "理财产品A说明",
-                "product_faq.md",
-                "我们的理财产品A年化收益率为3.5%-5.2%，投资期限为6个月至3年，最低投资金额10000元。注意：理财非存款，产品有风险，投资须谨慎。以上信息仅供参考，具体以合同条款为准。"
+                "本机 Docker 注意",
+                "java-dev.md",
+                """
+                本机用 OrbStack 跑 LumenCS。改 Java 代码后需要 docker compose up -d --build backend，慢在镜像里重新 mvn package，不是重新拉 MySQL 镜像。
+                只改 .env 用 --force-recreate backend，不要加 --build。
+                博客写入走 LightDiary 管理 API，不要直连博客 MySQL。
+                """
         );
         knowledgeService.ingest(
-                "退款政策",
-                "refund_policy.md",
-                "退款政策：用户在购买后7天内可申请无理由退款，超过7天需提供合理原因。退款将在3-5个工作日内原路退回。大额退款可能需要人工审核并创建工单。"
+                "个人作息备忘",
+                "life.md",
+                """
+                工作日上午写代码，下午开会。晚上 11 点后不看工单。
+                常去的咖啡：生椰拿铁少糖少冰。工位在 A 区靠窗。
+                问「我几点睡觉」时如果知识库没有更新，就说以这条备忘为准。
+                """
         );
         knowledgeService.ingest(
-                "开户流程",
-                "account_guide.md",
-                "开户流程：1.准备身份证原件 2.填写开户申请表 3.进行视频认证 4.设置交易密码 5.完成风险评估问卷。整个流程约需15-30分钟。"
+                "管家能做什么",
+                "hub.md",
+                """
+                个人 AI 中枢可以：回答已上传的笔记、把一句话记进知识库、加待办、写博客草稿、点一杯演示奶茶。
+                不是银行客服，不办理开户退款。写博客需要先登录中枢控制台。
+                """
         );
         log.info("seeded default knowledge documents");
     }

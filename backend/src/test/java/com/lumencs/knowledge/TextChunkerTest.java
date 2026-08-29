@@ -47,4 +47,19 @@ class TextChunkerTest {
         assertEquals(text.substring(text.length() - chunks.get(chunks.size() - 1).length()),
                 chunks.get(chunks.size() - 1), "末块应为原文后缀");
     }
+
+    @Test
+    void 段落父块短于子块上限时检索与上下文相同() {
+        String text = "第一段说明。\n\n第二段补充。";
+        List<TextChunker.Piece> pieces = TextChunker.split(text, TextChunker.Options.defaults());
+        assertFalse(pieces.isEmpty());
+        assertEquals(pieces.get(0).retrieval(), pieces.get(0).context());
+    }
+
+    @Test
+    void 预览块数量与切分一致() {
+        String text = "A".repeat(80) + "\n\n" + "B".repeat(80);
+        assertEquals(TextChunker.split(text, TextChunker.Options.defaults()).size(),
+                TextChunker.preview(text, TextChunker.Options.defaults()).size());
+    }
 }

@@ -21,6 +21,10 @@ const embed = route.path === '/embed'
 const articleSlug = ref(typeof route.query.slug === 'string' ? route.query.slug : '')
 const articleTitle = ref('')
 const SESSION_KEY = embed ? 'lumencs_embed_session' : 'lumencs_session'
+const SESSION_LIST_KEY = embed ? 'lumencs_embed_sessions' : 'lumencs_sessions'
+
+type SessionMeta = { id: string; title: string; updatedAt: number }
+const sessions = ref<SessionMeta[]>([])
 const sessionId = ref(localStorage.getItem(SESSION_KEY) || '')
 const input = ref('')
 const loading = ref(false)
@@ -33,13 +37,15 @@ let pollTimer: number | null = null
 
 const prompts = articleSlug.value
   ? ['这篇文章在讲什么？', '有哪些关键结论？', '和我手头的项目怎么结合？']
-  : ['加班口渴，帮我点杯奶茶', '帮我写一篇博客：OrbStack 连不上 Docker MySQL', '理财产品A收益多少？', '我要退款']
+  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '加班口渴，帮我点杯奶茶', '帮我写一篇博客：OrbStack 连不上 Docker MySQL']
 
 onMounted(async () => {
+  sessions.value = readSessionList()
   if (!sessionId.value) {
     sessionId.value = crypto.randomUUID()
     localStorage.setItem(SESSION_KEY, sessionId.value)
   }
+  touchSession(sessionId.value)
   if (articleSlug.value) {
     try {
       const scope = await api.scope(articleSlug.value)
@@ -96,6 +102,7 @@ const sseHandler = {
   onSession(id: string) {
     sessionId.value = id
     localStorage.setItem(SESSION_KEY, id)
+    touchSession(id)
   },
   onStep(step: AgentStep) {
     steps.value.push(step)
@@ -141,6 +148,7 @@ async function send(text?: string) {
   error.value = ''
   input.value = ''
   messages.value.push({ role: 'user', content: message })
+  touchSession(sessionId.value, message)
   steps.value = []
   loading.value = true
   await scrollBottom()
@@ -190,12 +198,70 @@ async function submitCard(item: ChatItem, values: Record<string, string>) {
   }
 }
 
+function readSessionList(): SessionMeta[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SESSION_LIST_KEY) || '[]')
+    return Array.isArray(raw) ? raw : []
+  } catch {
+    return []
+  }
+}
+
+function writeSessionList(list: SessionMeta[]) {
+  const trimmed = list
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 30)
+  localStorage.setItem(SESSION_LIST_KEY, JSON.stringify(trimmed))
+  sessions.value = trimmed
+}
+
+function touchSession(id: string, maybeTitle?: string) {
+  if (!id) return
+  const list = readSessionList()
+  const title = (maybeTitle || '').trim().slice(0, 24)
+  const existing = list.find((item) => item.id === id)
+  if (existing) {
+    existing.updatedAt = Date.now()
+    if (title && (existing.title === '新对话' || !existing.title)) {
+      existing.title = title
+    }
+  } else {
+    list.unshift({ id, title: title || '新对话', updatedAt: Date.now() })
+  }
+  writeSessionList(list)
+}
+
+async function openSession(id: string) {
+  if (id === sessionId.value || loading.value) return
+  sessionId.value = id
+  localStorage.setItem(SESSION_KEY, id)
+  messages.value = []
+  steps.value = []
+  error.value = ''
+  touchSession(id)
+  await loadHistory()
+}
+
 function newSession() {
   sessionId.value = crypto.randomUUID()
   localStorage.setItem(SESSION_KEY, sessionId.value)
   messages.value = []
   steps.value = []
   error.value = ''
+  touchSession(sessionId.value)
+}
+
+async function removeSession(id: string) {
+  if (loading.value) return
+  try {
+    await api.deleteSession(id)
+  } catch {
+    /* 本地列表仍删 */
+  }
+  writeSessionList(readSessionList().filter((item) => item.id !== id))
+  if (id === sessionId.value) {
+    newSession()
+  }
 }
 
 function stepLabel(step: AgentStep) {
@@ -261,8 +327,36 @@ async function rate(item: ChatItem, score: 'UP' | 'DOWN') {
 
     <main
       class="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 pb-6"
-      :class="embed ? 'grid-cols-1' : 'lg:grid-cols-[minmax(0,1fr)_280px]'"
+      :class="embed ? 'grid-cols-1' : 'lg:grid-cols-[200px_minmax(0,1fr)_240px]'"
     >
+      <aside v-if="!embed" class="panel h-fit max-h-[72vh] overflow-y-auto p-3">
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">会话</p>
+          <button class="text-xs accent" @click="newSession">新建</button>
+        </div>
+        <div
+          v-for="item in sessions"
+          :key="item.id"
+          class="mb-1 flex items-center gap-1 rounded-xl px-2 py-1.5"
+          :class="item.id === sessionId ? 'bg-[var(--accent-dim)]' : ''"
+        >
+          <button
+            class="min-w-0 flex-1 truncate text-left text-xs"
+            :class="item.id === sessionId ? 'text-[var(--accent)]' : 'text-[var(--muted)]'"
+            @click="openSession(item.id)"
+          >
+            {{ item.title || '新对话' }}
+          </button>
+          <button
+            class="shrink-0 px-1 text-[11px] text-[var(--muted)] hover:text-[var(--danger)]"
+            title="删除"
+            @click.stop="removeSession(item.id)"
+          >
+            删除
+          </button>
+        </div>
+        <p v-if="!sessions.length" class="muted text-xs">暂无会话</p>
+      </aside>
       <section class="panel flex min-h-[72vh] flex-col overflow-hidden">
         <div v-if="articleSlug" class="border-b border-[var(--line)] px-5 py-3 text-sm">
           <span class="muted">正在以单文范围检索 · </span>
@@ -270,11 +364,9 @@ async function rate(item: ChatItem, score: 'UP' | 'DOWN') {
         </div>
         <div ref="listEl" class="flex-1 space-y-5 overflow-y-auto p-5">
           <div v-if="!messages.length" class="max-w-lg">
-            <p class="serif text-3xl leading-tight">先问一句，再决定走知识还是办事。</p>
-            <p class="muted mt-3 text-sm leading-relaxed">
-              {{ articleSlug
-                ? '回答只会引用当前文章的切块。不确定的内容会建议转人工或去知识库补文档。'
-                : '点奶茶看记忆预填；问收益看引用。写博客请先登录控制台，再回本页发「写一篇」。' }}
+            <p class="serif text-3xl leading-tight">有什么需要帮忙的？</p>
+            <p v-if="articleSlug" class="muted mt-3 text-sm leading-relaxed">
+              回答只会引用当前文章。
             </p>
             <div class="mt-5 flex flex-wrap gap-2">
               <button v-for="item in prompts" :key="item" class="chip" @click="send(item)">{{ item }}</button>

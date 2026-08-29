@@ -171,6 +171,15 @@ public class ChatService {
                 .orderByAsc(ChatMessage::getId));
     }
 
+    public void deleteSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        messageMapper.delete(new LambdaQueryWrapper<ChatMessage>().eq(ChatMessage::getSessionId, sessionId));
+        sessionMapper.deleteById(sessionId);
+        workingMemory.clearWorkflow(sessionId);
+    }
+
     private void ensureSession(String sid, String userLabel) {
         if (sessionMapper.selectById(sid) != null) {
             return;

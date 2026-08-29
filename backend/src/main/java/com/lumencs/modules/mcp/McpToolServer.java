@@ -59,8 +59,9 @@ public class McpToolServer {
 
     public List<Map<String, Object>> listTools() {
         List<Map<String, Object>> tools = new ArrayList<>();
-        tools.add(tool("ticket_create", "创建客服工单", List.of("title", "description", "priority", "session_id", "user_label")));
-        tools.add(tool("ticket_query", "按工单号查询工单", List.of("ticket_no")));
+        tools.add(tool("ticket_create", "创建待办事项", List.of("title", "description", "priority", "session_id", "user_label")));
+        tools.add(tool("ticket_query", "按编号查询待办", List.of("ticket_no")));
+        tools.add(tool("memo_save", "把备忘写入个人知识库", List.of("title", "content")));
         tools.add(tool("kb_search", "检索内部知识库", List.of("query")));
         tools.add(tool("blog_search", "检索个人博客已发布文章", List.of("query")));
         tools.add(tool("blog_get", "按 slug 读取一篇已发布文章", List.of("slug")));
@@ -173,9 +174,16 @@ public class McpToolServer {
                         .findFirst()
                         .orElse(null);
                 yield ticket == null
-                        ? Map.of("success", false, "error", "未找到工单")
+                        ? Map.of("success", false, "error", "未找到待办")
                         : Map.of("success", true, "ticketNo", ticket.getTicketNo(),
                         "status", ticket.getStatus(), "title", ticket.getTitle());
+            }
+            case "memo_save" -> {
+                String title = str(args, "title");
+                String content = str(args, "content");
+                var doc = knowledgeService.ingest(title, "memo", content);
+                yield Map.of("success", true, "title", doc.getTitle(), "documentId", doc.getId(),
+                        "chunkCount", doc.getChunkCount() == null ? 0 : doc.getChunkCount());
             }
             case "kb_search" -> {
                 List<RagHit> hits = knowledgeService.search(str(args, "query"));

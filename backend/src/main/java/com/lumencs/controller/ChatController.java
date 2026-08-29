@@ -3,13 +3,15 @@ package com.lumencs.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.model.dto.CardRequest;
 import com.lumencs.model.dto.ChatRequest;
-import com.lumencs.model.entity.ChatMessage;
 import com.lumencs.model.vo.MessageVO;
+import com.lumencs.common.ApiResponse;
+import com.lumencs.common.R;
 import com.lumencs.service.ChatService;
 import com.lumencs.security.HubAuth;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,5 +55,11 @@ public class ChatController {
         return chatService.history(sessionId).stream()
                 .map(msg -> MessageVO.from(msg, objectMapper))
                 .toList();
+    }
+
+    @DeleteMapping("/{sessionId}")
+    public R<Void> delete(@PathVariable String sessionId) {
+        chatService.deleteSession(sessionId);
+        return ApiResponse.ok(null);
     }
 }

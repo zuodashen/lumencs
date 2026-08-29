@@ -20,8 +20,8 @@ const groups = [
     label: '运营',
     links: [
       { to: '/console/knowledge', label: '知识库' },
-      { to: '/console/tickets', label: '工单' },
-      { to: '/console/reviews', label: '审核' },
+      { to: '/console/tickets', label: '待办' },
+      { to: '/console/reviews', label: '安全审核' },
       { to: '/console/traces', label: '追踪' },
       { to: '/console/memory', label: '记忆' },
       { to: '/console/tools', label: '工具' },

@@ -22,51 +22,39 @@ public final class WorkflowCatalog {
 
     public static WorkflowDef of(String id) {
         return switch (id) {
-            case "refund" -> new WorkflowDef(
-                    "refund",
-                    "退款申请",
-                    "请点选原因并填写订单信息，提交后会创建工单。",
+            case "memo" -> new WorkflowDef(
+                    "memo",
+                    "记一笔",
+                    "确认后会写入个人知识库，之后可以直接问我。",
                     List.of(
-                            new WorkflowSlot("orderId", "text", "订单号", true, List.of()),
-                            new WorkflowSlot("reason", "choice", "退款原因", true,
-                                    List.of("7天无理由", "质量问题", "发货延迟", "其他")),
-                            new WorkflowSlot("remark", "text", "补充说明", false, List.of())
+                            new WorkflowSlot("title", "text", "标题", true, List.of()),
+                            new WorkflowSlot("content", "textarea", "内容", true, List.of())
+                    ),
+                    "memo_save"
+            );
+            case "todo" -> new WorkflowDef(
+                    "todo",
+                    "待办事项",
+                    "确认后记一条待办，可在控制台「待办」里改状态。",
+                    List.of(
+                            new WorkflowSlot("title", "text", "做什么", true, List.of()),
+                            new WorkflowSlot("due", "choice", "什么时候", true,
+                                    List.of("今天", "本周", "以后")),
+                            new WorkflowSlot("remark", "text", "备注", false, List.of())
                     ),
                     "ticket_create"
             );
-            case "account_open" -> new WorkflowDef(
-                    "account_open",
-                    "开户办理",
-                    "选择产品并填写称呼，我们将生成开户工单。",
-                    List.of(
-                            new WorkflowSlot("product", "choice", "办理产品", true,
-                                    List.of("普通证券账户", "基金账户", "理财产品A")),
-                            new WorkflowSlot("displayName", "text", "称呼", true, List.of())
-                    ),
-                    "ticket_create"
-            );
-            case "ticket_query" -> new WorkflowDef(
-                    "ticket_query",
-                    "工单查询",
-                    "输入工单号即可查询进度。",
-                    List.of(new WorkflowSlot("ticketNo", "text", "工单号", true, List.of())),
+            case "todo_query" -> new WorkflowDef(
+                    "todo_query",
+                    "查待办",
+                    "输入待办编号即可看进度。",
+                    List.of(new WorkflowSlot("ticketNo", "text", "待办编号", true, List.of())),
                     "ticket_query"
-            );
-            case "complaint" -> new WorkflowDef(
-                    "complaint",
-                    "投诉建议",
-                    "选择类型后提交，客服会跟进。",
-                    List.of(
-                            new WorkflowSlot("category", "choice", "投诉类型", true,
-                                    List.of("服务态度", "处理时效", "产品说明", "其他")),
-                            new WorkflowSlot("detail", "text", "具体情况", true, List.of())
-                    ),
-                    "ticket_create"
             );
             case "milk_tea" -> new WorkflowDef(
                     "milk_tea",
                     "工位奶茶局",
-                    "改 bug 改到口渴了？点选规格，工位号可手填，提交后下单。",
+                    "演示流程：点选规格，工位号可手填，提交后下单。",
                     List.of(
                             new WorkflowSlot("drink", "choice", "喝什么", true,
                                     List.of("生椰拿铁", "伯牙绝弦", "多肉葡萄", "美式")),
@@ -101,7 +89,7 @@ public final class WorkflowCatalog {
             case "blog_bookmark" -> new WorkflowDef(
                     "blog_bookmark",
                     "添加书签",
-                    "核对链接和分组后再写入博客书签页。书签没有文章标签，只有分组。",
+                    "核对链接和分组后再写入博客书签页。",
                     List.of(
                             new WorkflowSlot("name", "text", "名称", true, List.of()),
                             new WorkflowSlot("link", "text", "链接", true, List.of()),
@@ -172,6 +160,23 @@ public final class WorkflowCatalog {
             String name = message.replaceAll(".*(标签|tag)", "").replaceAll("[：:]", "").trim();
             if (!name.isBlank() && name.length() <= 20) {
                 found.put("name", name);
+            }
+        }
+        if ("memo".equals(intent)) {
+            String body = message.replaceFirst("^(帮我)?(记一下|记下|备忘|记一笔)[：:，,\\s]*", "").trim();
+            if (!body.isBlank()) {
+                found.put("content", body);
+                String title = body.split("[\\n。！？]")[0];
+                if (title.length() > 24) {
+                    title = title.substring(0, 24);
+                }
+                found.put("title", title);
+            }
+        }
+        if ("todo".equals(intent)) {
+            String body = message.replaceFirst("^(帮我)?(记个待办|待办|提醒我|别忘了)[：:，,\\s]*", "").trim();
+            if (!body.isBlank()) {
+                found.put("title", body.length() > 40 ? body.substring(0, 40) : body);
             }
         }
         return found;

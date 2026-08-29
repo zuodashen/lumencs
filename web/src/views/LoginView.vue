@@ -5,8 +5,8 @@ import { api } from '../api'
 
 const router = useRouter()
 const route = useRoute()
-const username = ref('admin')
-const password = ref('lumen123')
+const username = ref('')
+const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
@@ -36,11 +36,11 @@ async function submit() {
       <h1 class="serif mt-1 mb-6 text-3xl">进入中枢</h1>
       <label class="mb-3 block text-sm muted">
         用户名
-        <input v-model="username" class="input mt-1" />
+        <input v-model="username" class="input mt-1" autocomplete="username" />
       </label>
       <label class="mb-4 block text-sm muted">
         密码
-        <input v-model="password" type="password" class="input mt-1" />
+        <input v-model="password" type="password" class="input mt-1" autocomplete="current-password" />
       </label>
       <p v-if="error" class="danger mb-3 text-sm">{{ error }}</p>
       <button class="btn-primary w-full" :disabled="loading">{{ loading ? '登录中…' : '进入控制台' }}</button>

@@ -52,7 +52,7 @@ public class SupervisorAgent {
             sink.step("supervisor", "start", Map.of("cardSubmit", state.isCardSubmit()));
             if (state.isCardSubmit()) {
                 String intent = workingMemory.getString(state.getSessionId(), "intent");
-                state.setIntent(intent.isBlank() ? "refund" : intent);
+                state.setIntent(intent.isBlank() ? "todo" : intent);
                 state.setIntentConfidence(1.0);
             } else {
                 intentRouter.process(state, sink);

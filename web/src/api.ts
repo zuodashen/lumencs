@@ -259,8 +259,26 @@ export const api = {
   health: () => fetch(`${API_BASE}/api/health`).then((r) => r.json()),
   documents: (pageNum = 1, pageSize = 10) =>
     adminFetch(`/api/admin/knowledge?pageNum=${pageNum}&pageSize=${pageSize}`),
-  createDocument: (body: { title: string; source?: string; content: string }) =>
-    adminFetch('/api/admin/knowledge', { method: 'POST', body: JSON.stringify(body) }),
+  createDocument: (body: {
+    title: string
+    source?: string
+    content: string
+    collapseWhitespace?: boolean
+    paragraphSplit?: boolean
+    parentMax?: number
+    childMax?: number
+  }) => adminFetch('/api/admin/knowledge', { method: 'POST', body: JSON.stringify(body) }),
+  documentDetail: (id: number) => adminFetch(`/api/admin/knowledge/${id}`),
+  deleteDocument: (id: number) => adminFetch(`/api/admin/knowledge/${id}`, { method: 'DELETE' }),
+  previewChunks: (body: {
+    content: string
+    collapseWhitespace?: boolean
+    paragraphSplit?: boolean
+    parentMax?: number
+    childMax?: number
+  }) => adminFetch('/api/admin/knowledge/preview', { method: 'POST', body: JSON.stringify(body) }),
+  recallTest: (body: { query: string; documentId?: number }) =>
+    adminFetch('/api/admin/knowledge/recall', { method: 'POST', body: JSON.stringify(body) }),
   reindexKnowledge: () => adminFetch('/api/admin/knowledge/reindex', { method: 'POST' }),
   tickets: (query: PageQuery & { status?: string } = {}) => {
     const params = new URLSearchParams()
@@ -298,6 +316,14 @@ export const api = {
     fetch(`${API_BASE}/api/chat/${encodeURIComponent(sessionId)}/messages`).then(async (res) => {
       const json = await res.json()
       return Array.isArray(json) ? json : unwrap<any[]>(json)
+    }),
+  deleteSession: (sessionId: string) =>
+    fetch(`${API_BASE}/api/chat/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).then(async (res) => {
+      if (!res.ok) throw new Error('删除会话失败')
+      const json = await res.json().catch(() => ({ state: 200 }))
+      if (json.state && json.state !== 200) {
+        throw new Error(json.msg || '删除会话失败')
+      }
     }),
   scope: (slug: string) =>
     fetch(`${API_BASE}/api/hub/scope?slug=${encodeURIComponent(slug)}`).then(async (res) => {

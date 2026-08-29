@@ -78,7 +78,7 @@ async function decide(item: ReviewItem, action: 'APPROVE' | 'REJECT') {
 
 <template>
   <div>
-    <h1 class="serif mb-2 text-3xl">审核收件箱</h1>
+    <h1 class="serif mb-2 text-3xl">安全审核</h1>
     <p class="muted mb-4 text-sm">
       合规未通过的回复在这里处理。通过或驳回后会写回访客会话（刷新或等待轮询即可看到）。备注在通过时会作为改写正文。
     </p>

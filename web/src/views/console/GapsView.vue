@@ -34,7 +34,7 @@ async function generate(item: any) {
   <div class="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
     <section>
       <h1 class="serif mb-2 text-3xl">知识缺口</h1>
-      <p class="muted mb-5 text-sm">差评、以及知识问答没有引用的回复。生成的 FAQ 请复制到博客，再点知识库同步回来——仓库保持分离。</p>
+      <p class="muted mb-5 text-sm">差评和没有引用的回复会出现在这里。</p>
       <p v-if="error" class="danger mb-3">{{ error }}</p>
       <article v-for="item in gaps" :key="item.messageId" class="panel mb-3 p-4">
         <p class="text-xs accent">{{ item.kind }} · {{ item.intent || '—' }}</p>

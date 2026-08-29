@@ -18,7 +18,7 @@ import java.util.Set;
 public class IntentRouterAgent {
 
     private static final Set<String> INTENTS = Set.of(
-            "knowledge_rag", "refund", "account_open", "ticket_query", "complaint",
+            "knowledge_rag", "memo", "todo", "todo_query",
             "compliance_checker", "milk_tea", "chitchat",
             "blog_article", "blog_bookmark", "blog_tag"
     );
@@ -31,38 +31,33 @@ public class IntentRouterAgent {
     private static final String SYSTEM_PROMPT = """
             你是意图识别Agent。只返回 JSON，格式：{"intent": "...", "confidence": 0.0-1.0}
             intent 只能是以下之一：
-            knowledge_rag, refund, account_open, ticket_query, complaint, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
+            knowledge_rag, memo, todo, todo_query, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
             规则：
-            - 产品咨询、政策、利率、怎么办理的说明 → knowledge_rag
-            - 我要退款、申请退钱 → refund
-            - 我要开户、开通账户 → account_open
-            - 查工单、工单进度 → ticket_query
-            - 投诉、不满意 → complaint
+            - 问自己的文档、笔记、博客、怎么做、是什么 → knowledge_rag
+            - 帮我记一下、备忘、写进知识库 → memo
+            - 待办、提醒我、别忘了 → todo
+            - 查待办、待办编号、事项进度 → todo_query
             - 盗刷、欺诈、举报 → compliance_checker
             - 点奶茶、点咖啡、下午茶、口渴、加班喝一杯、再来一杯 → milk_tea
             - 写博客、发文章、存草稿、帮我写成博文、发布到博客 → blog_article
             - 收藏链接、加书签、收藏这个网址 → blog_bookmark
             - 新建标签、创建一个文章标签（不是给书签打标签） → blog_tag
-            - 问候、闲聊、你是谁、日常问题、心情天气、与办理业务无关的聊天 → chitchat
+            - 问候、闲聊、你是谁、日常问题、心情天气 → chitchat
             confidence：表述明确时接近 1.0。
             闲聊请给 0.7 以上，不要把「你好」标成低置信去澄清。
             只有完全不知道用户要干什么（例如「帮我弄一下」）才把 confidence 压到 0.5 以下。
             """;
 
     private static final String CLARIFICATION_TEXT = """
-            我还没太理解您的意思。您是想：
-            1. 咨询产品 / 政策（如收益、利率、开户流程）
-            2. 办理退款
-            3. 开通账户
-            4. 查询工单进度
-            5. 投诉建议
-            6. 举报欺诈 / 盗刷等安全问题
-            7. 点一杯奶茶（工位奶茶局）
-            8. 随便聊聊 / 问日常问题
-            9. 写博客 / 存草稿
-            10. 添加书签
-            11. 新建文章标签
-            请重新描述一下，我来帮您处理。""";
+            我还没太理解。您是想：
+            1. 问知识库里的笔记 / 文档
+            2. 记一笔到知识库
+            3. 加一条待办
+            4. 查待办进度
+            5. 写博客 / 存草稿
+            6. 点一杯奶茶（演示）
+            7. 随便聊聊
+            请再说具体一点。""";
 
     private final ChatClient chatClient;
     private final AgentTracer tracer;
@@ -137,7 +132,7 @@ public class IntentRouterAgent {
         }
         if ("knowledge_rag".equals(keyed)
                 && !WorkflowCatalog.mentionsSlotOption(last, message)
-                && containsAny(message, "多少", "怎么", "什么", "政策", "收益", "利率")) {
+                && containsAny(message, "多少", "怎么", "什么", "文档", "笔记", "知识库")) {
             return true;
         }
         return false;
@@ -149,17 +144,14 @@ public class IntentRouterAgent {
 
     private String keywordFallback(String message) {
         String msg = message == null ? "" : message;
-        if (containsAny(msg, "退款", "退钱", "退货")) {
-            return "refund";
+        if (containsAny(msg, "记一下", "记下", "备忘", "记一笔", "写进知识库", "存到知识库")) {
+            return "memo";
         }
-        if (containsAny(msg, "开户", "开个户")) {
-            return "account_open";
+        if (containsAny(msg, "待办号", "查待办", "事项进度", "待办编号")) {
+            return "todo_query";
         }
-        if (containsAny(msg, "工单号", "查工单", "工单进度")) {
-            return "ticket_query";
-        }
-        if (containsAny(msg, "投诉", "不满意")) {
-            return "complaint";
+        if (containsAny(msg, "待办", "提醒我", "别忘了", "记个待办")) {
+            return "todo";
         }
         if (containsAny(msg, "奶茶", "咖啡", "点单", "下午茶", "口渴", "生椰", "伯牙", "再来一杯")) {
             return "milk_tea";

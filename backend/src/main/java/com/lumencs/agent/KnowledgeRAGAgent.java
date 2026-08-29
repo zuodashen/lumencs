@@ -29,9 +29,8 @@ public class KnowledgeRAGAgent {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeRAGAgent.class);
 
     private static final String RAG_PROMPT = """
-            你是 LumenCS 知识库问答 Agent。严格基于检索文档回答，不要编造。
-            无相关文档时明确说明，并建议转人工或创建工单。
-            金融产品信息必须标注：以上信息仅供参考，具体以合同条款为准。
+            你是个人知识库管家。严格基于检索到的笔记/文档回答，不要编造。
+            没有相关内容时明确说知识库里没有，并建议把资料上传到控制台知识库，或说「帮我记一下」。
             在回答末尾用「引用来源：」列出用到的来源名。
 
             最近对话：

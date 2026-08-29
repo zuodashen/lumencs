@@ -59,7 +59,7 @@ async function change(id: number, status: string) {
 
 <template>
   <div>
-    <h1 class="serif mb-2 text-3xl">工单</h1>
+    <h1 class="serif mb-2 text-3xl">待办</h1>
     <p v-if="error" class="text-[#f07178]">{{ error }}</p>
     <p v-if="notice" class="mb-2 text-[#f07178]">{{ notice }}</p>
     <p class="mb-3 text-xs text-[#8b9bb8]">

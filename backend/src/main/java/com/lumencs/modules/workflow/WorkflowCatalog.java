@@ -35,7 +35,7 @@ public final class WorkflowCatalog {
             case "todo" -> new WorkflowDef(
                     "todo",
                     "待办事项",
-                    "确认后记一条待办，可在控制台「待办」里改状态。",
+                    "确认后记一条待办。之后可以说「有哪些待办」或「把 TK-… 改成进行中」。",
                     List.of(
                             new WorkflowSlot("title", "text", "做什么", true, List.of()),
                             new WorkflowSlot("due", "choice", "什么时候", true,
@@ -50,6 +50,17 @@ public final class WorkflowCatalog {
                     "没有编号时列出最近待办；有编号则查这一条。",
                     List.of(new WorkflowSlot("ticketNo", "text", "待办编号", false, List.of())),
                     "ticket_query"
+            );
+            case "todo_update" -> new WorkflowDef(
+                    "todo_update",
+                    "改待办状态",
+                    "核对编号和下一步状态。不能跳步，例如已创建不能直接改成已完成。",
+                    List.of(
+                            new WorkflowSlot("ticketNo", "text", "待办编号", true, List.of()),
+                            new WorkflowSlot("status", "choice", "改成", true,
+                                    List.of("已创建", "进行中", "等待处理", "已完成", "已关闭", "已升级"))
+                    ),
+                    "ticket_update"
             );
             case "milk_tea" -> new WorkflowDef(
                     "milk_tea",
@@ -179,7 +190,7 @@ public final class WorkflowCatalog {
                 found.put("title", body.length() > 40 ? body.substring(0, 40) : body);
             }
         }
-        if ("todo_query".equals(intent)) {
+        if ("todo_query".equals(intent) || "todo_update".equals(intent)) {
             java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("TK-\\d{8}-\\w+").matcher(message);
             if (matcher.find()) {
                 found.put("ticketNo", matcher.group());

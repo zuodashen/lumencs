@@ -63,6 +63,7 @@ public class McpToolServer {
         tools.add(tool("ticket_create", "创建待办事项", List.of("title", "description", "priority", "session_id", "user_label")));
         tools.add(tool("ticket_query", "按编号查询待办", List.of("ticket_no")));
         tools.add(tool("ticket_list", "列出最近待办及状态", List.of()));
+        tools.add(tool("ticket_update", "按编号改待办状态", List.of("ticket_no", "status")));
         tools.add(tool("memo_save", "把备忘写入个人知识库", List.of("title", "content")));
         tools.add(tool("kb_search", "检索内部知识库", List.of("query")));
         tools.add(tool("blog_search", "检索个人博客已发布文章", List.of("query")));
@@ -183,6 +184,23 @@ public class McpToolServer {
                         "title", ticket.getTitle());
             }
             case "ticket_list" -> ticketList();
+            case "ticket_update" -> {
+                Ticket before = ticketService.findByNo(str(args, "ticket_no"));
+                if (before == null) {
+                    yield Map.of("success", false, "error", "未找到待办 " + str(args, "ticket_no"));
+                }
+                String fromLabel = TicketStatus.zhOf(before.getStatus());
+                Ticket ticket = ticketService.updateStatusByNo(str(args, "ticket_no"), str(args, "status"));
+                yield Map.of(
+                        "success", true,
+                        "updated", true,
+                        "ticketNo", ticket.getTicketNo(),
+                        "title", ticket.getTitle(),
+                        "fromLabel", fromLabel,
+                        "status", ticket.getStatus(),
+                        "statusLabel", TicketStatus.zhOf(ticket.getStatus())
+                );
+            }
             case "memo_save" -> {
                 String title = str(args, "title");
                 String content = str(args, "content");

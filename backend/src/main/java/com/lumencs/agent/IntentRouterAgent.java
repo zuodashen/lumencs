@@ -18,7 +18,7 @@ import java.util.Set;
 public class IntentRouterAgent {
 
     private static final Set<String> INTENTS = Set.of(
-            "knowledge_rag", "memo", "todo", "todo_query",
+            "knowledge_rag", "memo", "todo", "todo_query", "todo_update",
             "compliance_checker", "milk_tea", "chitchat",
             "blog_article", "blog_bookmark", "blog_tag"
     );
@@ -31,12 +31,13 @@ public class IntentRouterAgent {
     private static final String SYSTEM_PROMPT = """
             你是意图识别Agent。只返回 JSON，格式：{"intent": "...", "confidence": 0.0-1.0}
             intent 只能是以下之一：
-            knowledge_rag, memo, todo, todo_query, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
+            knowledge_rag, memo, todo, todo_query, todo_update, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
             规则：
             - 问自己的文档、笔记、博客、怎么做、是什么 → knowledge_rag
             - 帮我记一下、备忘、写进知识库 → memo
-            - 待办、提醒我、别忘了 → todo
+            - 加待办、提醒我、别忘了 → todo
             - 有哪些待办、待办列表、查待办、事项进度 → todo_query
+            - 修改待办、改成进行中/已完成、把 TK- 改状态 → todo_update
             - 盗刷、欺诈、举报 → compliance_checker
             - 点奶茶、点咖啡、下午茶、口渴、加班喝一杯、再来一杯 → milk_tea
             - 写博客、发文章、存草稿、帮我写成博文、发布到博客 → blog_article
@@ -54,9 +55,10 @@ public class IntentRouterAgent {
             2. 记一笔到知识库
             3. 加一条待办
             4. 看待办列表 / 查进度
-            5. 写博客 / 存草稿
-            6. 点一杯奶茶（演示）
-            7. 随便聊聊
+            5. 改待办状态
+            6. 写博客 / 存草稿
+            7. 点一杯奶茶（演示）
+            8. 随便聊聊
             请再说具体一点。""";
 
     private final ChatClient chatClient;
@@ -146,6 +148,15 @@ public class IntentRouterAgent {
         String msg = message == null ? "" : message;
         if (containsAny(msg, "记一下", "记下", "备忘", "记一笔", "写进知识库", "存到知识库")) {
             return "memo";
+        }
+        if (!containsAny(msg, "加个待办", "记个待办", "新增待办")) {
+            if (containsAny(msg, "修改待办", "修改代办", "改状态", "这条待办", "这条代办")) {
+                return "todo_update";
+            }
+            if (msg.contains("TK-") && containsAny(msg, "改成", "改为", "标记为",
+                    "进行中", "已完成", "已关闭", "已升级", "等待处理", "已创建")) {
+                return "todo_update";
+            }
         }
         if (containsAny(msg, "待办号", "查待办", "事项进度", "待办编号", "哪些待办", "哪些代办",
                 "待办列表", "代办列表", "有什么待办", "有哪些代办")) {

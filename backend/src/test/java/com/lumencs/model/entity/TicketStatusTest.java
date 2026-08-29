@@ -52,6 +52,13 @@ class TicketStatusTest {
     }
 
     @Test
+    void 中文状态可解析() {
+        assertEquals(TicketStatus.PROCESSING, TicketStatus.parseFlexible("进行中"));
+        assertEquals(TicketStatus.RESOLVED, TicketStatus.parseFlexible("已完成"));
+        assertEquals(TicketStatus.CREATED, TicketStatus.parseFlexible("CREATED"));
+    }
+
+    @Test
     void 未知状态抛错() {
         assertThrows(IllegalArgumentException.class, () -> TicketStatus.parse("UNKNOWN"));
         assertThrows(IllegalArgumentException.class, () -> TicketStatus.parse(""));

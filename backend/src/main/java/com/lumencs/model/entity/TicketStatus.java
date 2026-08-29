@@ -39,10 +39,40 @@ public enum TicketStatus {
 
     public static String zhOf(String raw) {
         try {
-            return parse(raw).zh();
+            return parseFlexible(raw).zh();
         } catch (IllegalArgumentException e) {
             return raw == null ? "" : raw;
         }
+    }
+
+    /** 控制台英文码与对话里的中文名都认。 */
+    public static TicketStatus parseFlexible(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("工单状态不能为空");
+        }
+        String text = raw.trim();
+        try {
+            return parse(text);
+        } catch (IllegalArgumentException ignored) {
+            // fall through
+        }
+        return switch (text) {
+            case "已创建", "新建" -> CREATED;
+            case "进行中", "处理中" -> PROCESSING;
+            case "等待处理", "等人工", "转人工" -> WAITING_HUMAN;
+            case "已完成", "完成", "已解决", "解决" -> RESOLVED;
+            case "已关闭", "关闭" -> CLOSED;
+            case "已升级", "升级" -> ESCALATED;
+            default -> throw new IllegalArgumentException("未知工单状态: " + raw);
+        };
+    }
+
+    public String nextZh() {
+        return TRANSITIONS.getOrDefault(this, EnumSet.noneOf(TicketStatus.class)).stream()
+                .map(TicketStatus::zh)
+                .sorted()
+                .reduce((a, b) -> a + " / " + b)
+                .orElse("无（终态）");
     }
 
     public static TicketStatus parse(String raw) {

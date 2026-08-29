@@ -90,9 +90,9 @@ public class TicketService {
             throw new BizException("工单不存在");
         }
         TicketStatus from = TicketStatus.parse(ticket.getStatus());
-        TicketStatus to = TicketStatus.parse(status);
+        TicketStatus to = TicketStatus.parseFlexible(status);
         if (!from.canTransitionTo(to)) {
-            throw new BizException("非法工单流转: " + from + " -> " + to);
+            throw new BizException("不能从「" + from.zh() + "」改到「" + to.zh() + "」。下一步可以是：" + from.nextZh());
         }
         ticket.setStatus(to.name());
         ticketMapper.updateById(ticket);
@@ -105,6 +105,23 @@ public class TicketService {
             );
         }
         return ticket;
+    }
+
+    public Ticket findByNo(String ticketNo) {
+        if (ticketNo == null || ticketNo.isBlank()) {
+            return null;
+        }
+        return ticketMapper.selectOne(new LambdaQueryWrapper<Ticket>()
+                .eq(Ticket::getTicketNo, ticketNo.trim()));
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Ticket updateStatusByNo(String ticketNo, String status) {
+        Ticket ticket = findByNo(ticketNo);
+        if (ticket == null) {
+            throw new BizException("未找到待办 " + ticketNo);
+        }
+        return updateStatus(ticket.getId(), status);
     }
 
     /**

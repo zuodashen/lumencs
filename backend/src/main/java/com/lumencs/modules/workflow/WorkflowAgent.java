@@ -109,6 +109,9 @@ public class WorkflowAgent {
         if (slots.containsKey("ticketNo")) {
             args.put("ticket_no", slots.get("ticketNo"));
         }
+        if ("ticket_update".equals(tool) && slots.containsKey("status")) {
+            args.put("status", slots.get("status"));
+        }
         sink.step("workflow", "call_tool", Map.of("tool", tool));
         Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
         state.getSubResults().put("workflow", formatResult(def, toolResult));
@@ -191,6 +194,11 @@ public class WorkflowAgent {
         if (Boolean.FALSE.equals(result.get("success"))) {
             return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
         }
+        if (Boolean.TRUE.equals(result.get("updated"))) {
+            return "已将 " + result.get("ticketNo") + "「" + result.getOrDefault("title", "")
+                    + "」从 " + result.getOrDefault("fromLabel", "")
+                    + " 改为 " + result.getOrDefault("statusLabel", result.get("status")) + "。";
+        }
         if ("ticket_create".equals(def.tool()) && result.get("ticketNo") != null) {
             return "待办已记下。编号：" + result.get("ticketNo")
                     + "，当前状态：" + TicketStatus.zhOf(String.valueOf(result.getOrDefault("status", "CREATED")));
@@ -222,7 +230,7 @@ public class WorkflowAgent {
                             .append('\n');
                 }
             }
-            sb.append("改状态请到控制台「待办」。要看某一条，把编号发我即可。");
+            sb.append("改状态可以说「把 TK-… 改成进行中」。要看某一条，把编号发我即可。");
             return sb.toString().strip();
         }
         if (result.get("ticketNo") != null) {

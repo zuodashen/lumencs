@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ChatView from './views/ChatView.vue'
 import LoginView from './views/LoginView.vue'
-import ConsoleLayout from './views/console/ConsoleLayout.vue'
-import DashboardView from './views/console/DashboardView.vue'
+import HubShell from './components/HubShell.vue'
+import HubHomeView from './views/HubHomeView.vue'
+import AppsView from './views/AppsView.vue'
 import KnowledgeView from './views/console/KnowledgeView.vue'
 import TicketsView from './views/console/TicketsView.vue'
 import TracesView from './views/console/TracesView.vue'
@@ -16,24 +17,26 @@ import ChannelsView from './views/console/ChannelsView.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'chat', component: ChatView },
     { path: '/embed', name: 'embed', component: ChatView },
     { path: '/console/login', name: 'login', component: LoginView },
     {
-      path: '/console',
-      component: ConsoleLayout,
+      path: '/',
+      component: HubShell,
       children: [
-        { path: '', redirect: '/console/overview' },
-        { path: 'overview', component: DashboardView },
-        { path: 'inbox', component: InboxView },
-        { path: 'gaps', component: GapsView },
-        { path: 'channels', component: ChannelsView },
-        { path: 'knowledge', component: KnowledgeView },
-        { path: 'tickets', component: TicketsView },
-        { path: 'traces', component: TracesView },
-        { path: 'memory', component: MemoryView },
-        { path: 'tools', component: ToolsView },
-        { path: 'reviews', component: ReviewsView },
+        { path: '', name: 'home', component: HubHomeView },
+        { path: 'chat', name: 'chat', component: ChatView },
+        { path: 'apps', name: 'apps', component: AppsView },
+        { path: 'console', redirect: '/' },
+        { path: 'console/overview', redirect: '/' },
+        { path: 'console/inbox', component: InboxView },
+        { path: 'console/gaps', component: GapsView },
+        { path: 'console/channels', component: ChannelsView },
+        { path: 'console/knowledge', component: KnowledgeView },
+        { path: 'console/tickets', component: TicketsView },
+        { path: 'console/traces', component: TracesView },
+        { path: 'console/memory', component: MemoryView },
+        { path: 'console/tools', component: ToolsView },
+        { path: 'console/reviews', component: ReviewsView },
       ],
     },
   ],

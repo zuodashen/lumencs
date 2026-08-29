@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
+import Icon from '../components/Icon.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -31,9 +32,12 @@ async function submit() {
 
 <template>
   <div class="flex min-h-screen items-center justify-center p-6">
-    <form class="panel w-full max-w-sm p-7" @submit.prevent="submit">
-      <p class="text-[11px] uppercase tracking-[0.28em] text-[var(--accent)]">Lumen Hub</p>
-      <h1 class="serif mt-1 mb-2 text-3xl">登录</h1>
+    <form class="panel w-full max-w-sm p-8" @submit.prevent="submit">
+      <span class="stat-icon bg-gradient-to-br from-[#5b8def] to-[#8b6cff] text-white">
+        <Icon name="spark" :size="16" />
+      </span>
+      <p class="mt-4 text-[11px] uppercase tracking-[0.28em] text-[var(--accent)]">Lumen Hub</p>
+      <h1 class="mt-1 mb-2 text-3xl font-semibold">登录</h1>
       <p class="muted mb-6 text-sm">对话和控制台使用同一账号</p>
       <label class="mb-3 block text-sm muted">
         用户名

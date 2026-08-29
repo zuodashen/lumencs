@@ -114,33 +114,57 @@ function unwrap<T>(json: { state?: number; code?: number; data?: T; msg?: string
   throw new Error(text || '请求失败')
 }
 
-async function parseSseStream(res: Response, handler: SseHandler) {
+async function parseSseStream(res: Response, handler: SseHandler): Promise<{ gotMessage: boolean; gotDone: boolean }> {
   if (!res.body) {
     throw new Error('浏览器不支持流式读取')
   }
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const blocks = buffer.split('\n\n')
-    buffer = blocks.pop() || ''
-    for (const block of blocks) {
-      const eventMatch = block.match(/^event:(.+)$/m)
-      const dataMatch = block.match(/^data:(.+)$/m)
-      if (!eventMatch || !dataMatch) continue
-      const event = eventMatch[1].trim()
-      const data = JSON.parse(dataMatch[1])
-      if (event === 'session') handler.onSession?.(data.sessionId)
-      if (event === 'step') handler.onStep?.(data)
-      if (event === 'card') handler.onCard?.(data)
-      if (event === 'token') handler.onToken?.(data.delta || '')
-      if (event === 'message') handler.onMessage?.(data)
-      if (event === 'error') handler.onError?.(data.message || '处理失败')
+  let gotMessage = false
+  let gotDone = false
+
+  const consume = (block: string) => {
+    const eventMatch = block.match(/^event:(.+)$/m)
+    const dataMatch = block.match(/^data:(.+)$/m)
+    if (!eventMatch || !dataMatch) return
+    const event = eventMatch[1].trim()
+    let data: any = {}
+    try {
+      data = JSON.parse(dataMatch[1])
+    } catch {
+      return
     }
+    if (event === 'session') handler.onSession?.(data.sessionId)
+    if (event === 'step') handler.onStep?.(data)
+    if (event === 'card') handler.onCard?.(data)
+    if (event === 'token') handler.onToken?.(data.delta || '')
+    if (event === 'message') {
+      gotMessage = true
+      handler.onMessage?.(data)
+    }
+    if (event === 'error') handler.onError?.(data.message || '处理失败')
+    if (event === 'done') gotDone = true
   }
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const blocks = buffer.split('\n\n')
+      buffer = blocks.pop() || ''
+      for (const block of blocks) consume(block)
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) consume(buffer)
+  } catch (e) {
+    if (gotMessage || gotDone) {
+      return { gotMessage, gotDone }
+    }
+    throw e
+  }
+  return { gotMessage, gotDone }
 }
 
 function chatHeaders(): Record<string, string> {
@@ -161,11 +185,14 @@ export async function streamChat(
 ) {
   const res = await authedStreamFetch(`${API_BASE}/api/chat`, payload)
   try {
-    await parseSseStream(res, handler)
+    const result = await parseSseStream(res, handler)
+    if (!result.gotMessage && !result.gotDone) {
+      throw new Error('没有收到完整回复，请再试一次')
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : ''
-    if (/network error|failed to fetch/i.test(msg)) {
-      throw new Error('对话连接被中断。请看页面是否已提示密钥问题；否则检查后端日志里的 dmx_api_error。')
+    if (/network error|failed to fetch|abort/i.test(msg)) {
+      throw new Error('连接中断了，请再发一次。')
     }
     throw e
   }
@@ -182,7 +209,18 @@ export async function streamCard(
   handler: SseHandler,
 ) {
   const res = await authedStreamFetch(`${API_BASE}/api/chat/card`, payload)
-  await parseSseStream(res, handler)
+  try {
+    const result = await parseSseStream(res, handler)
+    if (!result.gotMessage && !result.gotDone) {
+      throw new Error('卡片提交后没有收到完整回复')
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : ''
+    if (/network error|failed to fetch|abort/i.test(msg)) {
+      throw new Error('连接中断了，请再发一次。')
+    }
+    throw e
+  }
 }
 
 function loginRedirect() {

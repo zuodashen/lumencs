@@ -159,14 +159,7 @@ export async function streamChat(
   payload: { sessionId?: string; userLabel?: string; message: string; articleSlug?: string },
   handler: SseHandler,
 ) {
-  const res = await fetch(`${API_BASE}/api/chat`, {
-    method: 'POST',
-    headers: chatHeaders(),
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    throw new Error('聊天请求失败')
-  }
+  const res = await authedStreamFetch(`${API_BASE}/api/chat`, payload)
   try {
     await parseSseStream(res, handler)
   } catch (e) {
@@ -188,15 +181,35 @@ export async function streamCard(
   },
   handler: SseHandler,
 ) {
-  const res = await fetch(`${API_BASE}/api/chat/card`, {
+  const res = await authedStreamFetch(`${API_BASE}/api/chat/card`, payload)
+  await parseSseStream(res, handler)
+}
+
+function loginRedirect() {
+  const path = window.location.pathname
+  if (path.includes('/console/login')) return
+  const next = `${path}${window.location.search}` || '/'
+  window.location.href = `/console/login?next=${encodeURIComponent(next)}`
+}
+
+async function authedStreamFetch(url: string, payload: unknown, retried = false): Promise<Response> {
+  const res = await fetch(url, {
     method: 'POST',
     headers: chatHeaders(),
     body: JSON.stringify(payload),
   })
-  if (!res.ok) {
-    throw new Error('卡片提交失败')
+  if (res.status === 401 || res.status === 403) {
+    if (!retried && (await refreshAccessToken())) {
+      return authedStreamFetch(url, payload, true)
+    }
+    clearTokens()
+    loginRedirect()
+    throw new Error('请先登录')
   }
-  await parseSseStream(res, handler)
+  if (!res.ok) {
+    throw new Error(url.includes('/card') ? '卡片提交失败' : '聊天请求失败')
+  }
+  return res
 }
 
 /** 用 refresh token 换取新 token 对；失败清空本地凭据。 */
@@ -235,9 +248,7 @@ async function adminFetch(path: string, init: RequestInit = {}, retried = false)
       return adminFetch(path, init, true)
     }
     clearTokens()
-    if (!window.location.pathname.includes('/console/login')) {
-      window.location.href = '/console/login'
-    }
+    loginRedirect()
     throw new Error('登录已过期，请重新登录')
   }
   const json = await res.json()
@@ -294,12 +305,8 @@ export const api = {
   memory: (sessionId: string) => adminFetch(`/api/admin/memory?sessionId=${encodeURIComponent(sessionId)}`),
   tools: () => adminFetch('/api/admin/tools'),
   syncBlog: () => adminFetch('/api/admin/blog/sync', { method: 'POST' }),
-  /** 引用可点：拉取引用 chunk 的完整原文（公开只读） */
   chunk: (id: string) =>
-    fetch(`${API_BASE}/api/knowledge/chunks/${encodeURIComponent(id)}`).then(async (res) => {
-      const json = await res.json()
-      return unwrap<{ id: string; documentId?: number; source: string; title: string; content: string }>(json)
-    }),
+    adminFetch(`/api/knowledge/chunks/${encodeURIComponent(id)}`),
   reviews: (query: PageQuery & { status?: string } = {}) => {
     const params = new URLSearchParams()
     params.set('pageNum', String(query.pageNum ?? 1))
@@ -312,30 +319,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, note: note || '' }),
     }),
-  history: (sessionId: string) =>
-    fetch(`${API_BASE}/api/chat/${encodeURIComponent(sessionId)}/messages`).then(async (res) => {
-      const json = await res.json()
-      return Array.isArray(json) ? json : unwrap<any[]>(json)
-    }),
+  history: (sessionId: string) => adminFetch(`/api/chat/${encodeURIComponent(sessionId)}/messages`),
   deleteSession: (sessionId: string) =>
-    fetch(`${API_BASE}/api/chat/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }).then(async (res) => {
-      if (!res.ok) throw new Error('删除会话失败')
-      const json = await res.json().catch(() => ({ state: 200 }))
-      if (json.state && json.state !== 200) {
-        throw new Error(json.msg || '删除会话失败')
-      }
-    }),
-  scope: (slug: string) =>
-    fetch(`${API_BASE}/api/hub/scope?slug=${encodeURIComponent(slug)}`).then(async (res) => {
-      const json = await res.json()
-      return unwrap<{ slug: string; ready: boolean; title: string }>(json)
-    }),
+    adminFetch(`/api/chat/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
+  scope: (slug: string) => adminFetch(`/api/hub/scope?slug=${encodeURIComponent(slug)}`),
   feedback: (body: { sessionId: string; messageId: number; score: 'UP' | 'DOWN'; cited?: boolean; comment?: string }) =>
-    fetch(`${API_BASE}/api/chat/feedback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }).then(async (res) => unwrap(await res.json())),
+    adminFetch('/api/chat/feedback', { method: 'POST', body: JSON.stringify(body) }),
   hubOverview: () => adminFetch('/api/admin/hub/overview'),
   inbox: () => adminFetch('/api/admin/hub/inbox'),
   markInboxRead: (id: number) => adminFetch(`/api/admin/hub/inbox/${id}/read`, { method: 'POST' }),

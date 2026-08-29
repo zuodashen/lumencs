@@ -89,7 +89,7 @@ public class FeedbackService {
                 .orderByDesc(ChatMessage::getId)
                 .last("LIMIT 40"));
         for (ChatMessage msg : answers) {
-            if (hasCitations(msg)) {
+            if (hasCitations(msg) || isClarification(msg.getContent())) {
                 continue;
             }
             boolean already = result.stream().anyMatch(r -> msg.getId().equals(r.get("messageId")));
@@ -126,9 +126,10 @@ public class FeedbackService {
         String focus = target == null ? "" : "重点回答这一段助手回复对应的用户问题：\n" + target.getContent();
         String draft = chatClient.prompt()
                 .system("""
-                        你是技术博主的编辑。根据客服会话写一篇简短 FAQ Markdown。
+                        你是个人知识库的编辑。根据对话写一篇简短 FAQ Markdown，方便主人贴回知识库。
                         只要正文，不要解释。结构：标题、问题、回答、适用边界。
-                        不确定的事实写成「需人工核实」，不要编造数据。
+                        不确定的事实写成「需人工核实」，不要编造。
+                        不要写成银行客服或开户退款话术。
                         """)
                 .user("会话：\n" + conv + "\n" + focus)
                 .call()
@@ -139,6 +140,13 @@ public class FeedbackService {
     public long downCount() {
         Long n = feedbackMapper.selectCount(new LambdaQueryWrapper<Feedback>().eq(Feedback::getScore, DOWN));
         return n == null ? 0 : n;
+    }
+
+    private boolean isClarification(String content) {
+        if (content == null) {
+            return false;
+        }
+        return content.contains("我还没太理解") || content.contains("请重新描述");
     }
 
     private boolean hasCitations(ChatMessage msg) {

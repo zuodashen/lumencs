@@ -16,7 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 公开引用详情：聊天页点引用时按 chunkId 拉取完整原文（只读，无需登录）。
+ * 引用详情：聊天页点引用时按 chunkId 拉取完整原文（需已登录）。
  */
 @RestController
 @RequestMapping("/api/knowledge")

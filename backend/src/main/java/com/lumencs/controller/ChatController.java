@@ -51,10 +51,10 @@ public class ChatController {
     }
 
     @GetMapping("/{sessionId}/messages")
-    public List<MessageVO> messages(@PathVariable String sessionId) {
-        return chatService.history(sessionId).stream()
+    public R<List<MessageVO>> messages(@PathVariable String sessionId) {
+        return ApiResponse.ok(chatService.history(sessionId).stream()
                 .map(msg -> MessageVO.from(msg, objectMapper))
-                .toList();
+                .toList());
     }
 
     @DeleteMapping("/{sessionId}")

@@ -45,7 +45,7 @@ async function generate(item: any) {
     </section>
     <section class="panel p-4 h-fit">
       <h2 class="serif text-xl">草稿</h2>
-      <p class="muted mt-1 text-xs">不会自动写入 lightdiary。</p>
+      <p class="muted mt-1 text-xs">生成的是 Markdown 文本，请复制后自己贴进知识库或博客。系统不会自动发布。</p>
       <pre class="mt-4 whitespace-pre-wrap text-sm leading-relaxed">{{ draft || '选一条缺口生成。' }}</pre>
     </section>
   </div>

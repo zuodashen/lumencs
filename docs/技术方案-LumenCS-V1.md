@@ -10,7 +10,7 @@
 
 ### 现状
 
-V1.0 已落地：聊天编排、Qdrant RAG、工单落库、SSE 时间线、双 JWT、限流、意图置信度 + 澄清、规则 + LLM 合规 + HITL 收件箱、工单状态机 + Redis 单号锁、RAG LLM 改写/重排、工具真调用与日志入库、博客定时同步、Knife4j。
+V1 已落地：个人 AI 中枢编排（闲聊 / RAG / 记一笔 / 待办 / 写博客 / 演示奶茶）、Qdrant RAG、待办状态机、SSE、双 JWT、限流、意图置信度、合规+HITL、工具真调用、博客读写分离、知识库切分与召回测试、会话历史、FAQ Markdown 草稿（不自动发布）。
 
 仍待打磨：
 
@@ -205,17 +205,17 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 不是「意图后一次 LLM 结束」。流程：
 
 ```
-意图识别（milk_tea / refund / account_open / ticket_query / complaint / knowledge_rag / compliance_checker）
+意图识别（knowledge_rag / memo / todo / todo_query / milk_tea / chitchat / blog_*）
         │
-        ├─ 知识 / 安全：走 RAG 或固定话术
+   知识 / 闲聊：走 RAG 或闲聊 Agent
         └─ 办事：WorkflowCatalog 取槽位定义
-              ├─ 槽位不全 → SSE event: card（表单 + 选项按钮）
+              ├─ 槽位不全 → SSE event: card（表单 + 一次性 confirmToken）
               │              前端可点击选项，也可手输
               │              POST /api/chat/card 回灌工作记忆
-              └─ 槽位齐全 → MCP 真调用 tea_order / ticket_create / ticket_query
+              └─ 槽位齐全 → 工具真调用 memo_save / ticket_create / ticket_query / tea_order / blog_*
 ```
 
-明星演示「工位奶茶局」：加班改 bug 口渴 → 点选饮品/杯型/甜度/冰量/小料，手填杯数和工位号 → `tea_order` 出单号与金额。退款/开户走同一套槽位引擎，只是目录不同。
+明星演示「工位奶茶局」：加班改 bug 口渴 → 点选饮品规格、手填工位 → `tea_order`。记一笔 / 待办走同一套槽位引擎，只是目录不同。退款 / 开户已从目录删除。
 
 ### 5.7 与博客串联（三层；本仓先做齐，博客仓暂不改）
 
@@ -231,7 +231,7 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 **L2 站内助手（博客前台小改）**
 
 - `blog-web` 增加悬浮按钮，iframe 打开 LumenCS `/embed`（聊天精简页，CORS 白名单博客域名）
-- 或博客调 `POST {lumencs}/lumencs-api/api/chat`（公开聊天接口 + 限流）
+- 或博客 iframe `/embed?slug=`（需先登录中枢，与对话页同一账号）
 - 用户体系仍分离：博客游客 vs LumenCS sessionId
 
 **L3 知识打通（只改 LumenCS）**
@@ -327,6 +327,6 @@ GET = query；POST = JSON body。
 
 ## 九、能力边界（诚实口径）
 
-**可以陈述（已落地）：** 多 Agent Supervisor（意图置信度 + 低置信度澄清）；RAG 完整链路（LLM 改写 → 向量 Top8 → LLM 重排 Top3 → 引用可点）；规则 + LLM 合规 + HITL 收件箱；工单状态机 + 事务 + Redis 分布式锁单号；Redis 限流（IP + session）；双 JWT Refresh Token；SSE 时间线；Java 编排 + Python 检索拆分与降级；槽位办事卡片（工位奶茶 / 退款）；与个人博客公开 API 的知识同步（含定时）与工具调用；工具调用日志入库；OpenAPI（Knife4j / springdoc）+ 统一响应 + traceId。
+**可以陈述（已落地）：** 多 Agent Supervisor（意图置信度 + 低置信度澄清 + 闲聊）；RAG（改写 → Top8 → 重排 Top3 → 引用可点）；规则 + LLM 合规 + HITL；待办状态机 + 事务 + Redis 单号锁；Redis 限流；双 JWT；SSE；Java 编排 + Python 检索拆分与降级；槽位卡片（记一笔 / 待办 / 奶茶 / 写博客）；知识库切分、召回测试、会话历史；FAQ Markdown 草稿（不自动发布）；博客公开 API 同步与管理端 JWT 写入；OpenAPI + 统一响应 + traceId。
 
 **避免虚构：** 日均 10 万、QPS 500、Milvus 集群、Spring AI Alibaba、Eino、网关鉴权微服务、与博客「统一用户中心」、以及任何没有压测/监控数据的量化指标（FCR/CSAT/Token 节省百分比等）。

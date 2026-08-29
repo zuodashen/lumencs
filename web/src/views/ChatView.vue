@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import InteractiveCard from '../components/InteractiveCard.vue'
-import { api, streamCard, streamChat, type AgentStep, type ChatResult, type Citation, type WorkflowCard } from '../api'
+import { api, logoutTokens, streamCard, streamChat, type AgentStep, type ChatResult, type Citation, type WorkflowCard } from '../api'
 
 type ChatItem = {
   role: 'user' | 'assistant'
@@ -17,7 +17,9 @@ type ChatItem = {
 }
 
 const route = useRoute()
+const router = useRouter()
 const embed = route.path === '/embed'
+const hubUser = localStorage.getItem('lumencs_user') || 'admin'
 const articleSlug = ref(typeof route.query.slug === 'string' ? route.query.slug : '')
 const articleTitle = ref('')
 const SESSION_KEY = embed ? 'lumencs_embed_session' : 'lumencs_session'
@@ -277,6 +279,11 @@ function stepLabel(step: AgentStep) {
   return `${names[step.agent] || step.agent} · ${step.status}`
 }
 
+function logout() {
+  logoutTokens()
+  router.push('/console/login?next=/')
+}
+
 async function toggleCitation(cite: Citation) {
   const state = expandedCitations.value[cite.id] || { loading: false }
   if (state.content) {
@@ -320,8 +327,9 @@ async function rate(item: ChatItem, score: 'UP' | 'DOWN') {
       </div>
       <div v-if="!embed" class="flex items-center gap-2">
         <button class="btn-ghost" @click="newSession">新会话</button>
-        <RouterLink class="btn-ghost" to="/console/login?next=/">登录</RouterLink>
+        <span class="muted text-sm">{{ hubUser }}</span>
         <RouterLink class="btn-primary" to="/console">中枢控制台</RouterLink>
+        <button class="btn-ghost" @click="logout">退出</button>
       </div>
     </header>
 

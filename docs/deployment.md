@@ -19,10 +19,9 @@ OrbStack 会把 `docker compose` 项目显示成一组容器，项目名默认�
 
 | 层 | 改动 | 对应镜像 |
 | --- | --- | --- |
-| Java 后端 | HITL 写回会话、单文 RAG、通知幂等、SLA 扫描、CSAT / 知识缺口 / FAQ 草稿、启动补表 | `lumencs-backend` |
-| Python RAG | 检索支持 `document_id` 过滤（聊这篇） | `lumencs-rag-service` |
-| Vue 前端 | 中枢视觉与信息架构、事件 / 缺口 / 渠道页、聊天 CSAT 与 HITL 轮询 | `lumencs-web` |
-| Compose | backend / rag 读取 `.env`；透传 SLA、博客同步 cron | 不单独镜像 |
+| Java 后端 | 个人中枢编排、记一笔/待办、写博客闸门、知识切分与召回、会话删除、HITL/通知/SLA | `lumencs-backend` |
+| Python RAG | embedding + Qdrant；检索支持 `document_id` | `lumencs-rag-service` |
+| Vue 前端 | 对话会话列表、知识库导入/召回测试、中枢控制台 | `lumencs-web` |
 
 数据侧（**不清库**）：
 

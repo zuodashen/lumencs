@@ -40,10 +40,19 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  if (to.path.startsWith('/console') && to.path !== '/console/login') {
-    if (!localStorage.getItem('lumencs_token')) {
-      return '/console/login'
+  const token = localStorage.getItem('lumencs_token')
+  if (to.path === '/console/login') {
+    if (token) {
+      const raw = to.query.next
+      const next = typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\')
+        ? raw
+        : '/'
+      return next
     }
+    return true
+  }
+  if (!token) {
+    return { path: '/console/login', query: { next: to.fullPath } }
   }
   return true
 })

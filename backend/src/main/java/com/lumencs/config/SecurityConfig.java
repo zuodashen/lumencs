@@ -4,7 +4,6 @@ import com.lumencs.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -39,12 +38,10 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, e) -> writeAuthError(response, 403, "没有权限")))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/refresh", "/api/health", "/actuator/health").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/chat", "/api/chat/card", "/api/chat/feedback").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/chat/**", "/api/hub/**").permitAll()
-                        .requestMatchers(HttpMethod.DELETE, "/api/chat/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/doc.html").permitAll()
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .anyRequest().permitAll())
+                        .requestMatchers("/api/admin/**", "/api/chat/**", "/api/hub/**", "/api/knowledge/chunks/**")
+                        .hasRole("ADMIN")
+                        .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

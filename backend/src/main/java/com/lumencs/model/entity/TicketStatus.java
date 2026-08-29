@@ -26,6 +26,25 @@ public enum TicketStatus {
         return TRANSITIONS.getOrDefault(this, EnumSet.noneOf(TicketStatus.class)).contains(target);
     }
 
+    public String zh() {
+        return switch (this) {
+            case CREATED -> "已创建";
+            case PROCESSING -> "进行中";
+            case WAITING_HUMAN -> "等待处理";
+            case RESOLVED -> "已完成";
+            case CLOSED -> "已关闭";
+            case ESCALATED -> "已升级";
+        };
+    }
+
+    public static String zhOf(String raw) {
+        try {
+            return parse(raw).zh();
+        } catch (IllegalArgumentException e) {
+            return raw == null ? "" : raw;
+        }
+    }
+
     public static TicketStatus parse(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("工单状态不能为空");

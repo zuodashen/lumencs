@@ -39,7 +39,7 @@ let pollTimer: number | null = null
 
 const prompts = articleSlug.value
   ? ['这篇文章在讲什么？', '有哪些关键结论？', '和我手头的项目怎么结合？']
-  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '加班口渴，帮我点杯奶茶', '帮我写一篇博客：OrbStack 连不上 Docker MySQL']
+  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '我现在有哪些待办', '加班口渴，帮我点杯奶茶']
 
 onMounted(async () => {
   sessions.value = readSessionList()

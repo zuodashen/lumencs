@@ -6,6 +6,7 @@ import com.lumencs.memory.LongTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
 import com.lumencs.modules.blogwrite.BlogDraftComposer;
 import com.lumencs.modules.mcp.McpToolServer;
+import com.lumencs.model.entity.TicketStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -67,6 +68,20 @@ public class WorkflowAgent {
             prefilled = true;
         }
 
+        if (!state.isCardSubmit() && "todo_query".equals(def.id())) {
+            String tool = blank(slots.get("ticketNo")) ? "ticket_list" : "ticket_query";
+            Map<String, Object> args = new LinkedHashMap<>();
+            if (!blank(slots.get("ticketNo"))) {
+                args.put("ticket_no", slots.get("ticketNo"));
+            }
+            sink.step("workflow", "call_tool", Map.of("tool", tool));
+            Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
+            state.getSubResults().put("workflow", formatResult(def, toolResult));
+            workingMemory.clearWorkflow(state.getSessionId());
+            sink.step("workflow", "done", toolResult);
+            return state;
+        }
+
         if (!state.isCardSubmit()) {
             emitCard(state, sink, def, slots, prefilled);
             return state;
@@ -79,10 +94,14 @@ public class WorkflowAgent {
             return state;
         }
 
+        String tool = def.tool();
+        if ("todo_query".equals(def.id())) {
+            tool = blank(slots.get("ticketNo")) ? "ticket_list" : "ticket_query";
+        }
         Map<String, Object> args = new LinkedHashMap<>(slots);
         args.put("session_id", state.getSessionId());
         args.put("user_label", state.getUserLabel());
-        if ("ticket_create".equals(def.tool())) {
+        if ("ticket_create".equals(tool)) {
             args.put("title", String.valueOf(slots.getOrDefault("title", def.title())));
             args.put("description", buildDescription(def, slots));
             args.put("priority", "MEDIUM");
@@ -90,8 +109,8 @@ public class WorkflowAgent {
         if (slots.containsKey("ticketNo")) {
             args.put("ticket_no", slots.get("ticketNo"));
         }
-        sink.step("workflow", "call_tool", Map.of("tool", def.tool()));
-        Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), def.tool(), args);
+        sink.step("workflow", "call_tool", Map.of("tool", tool));
+        Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
         state.getSubResults().put("workflow", formatResult(def, toolResult));
         if (toolResult.get("ticketNo") != null) {
             state.setTicketNo(String.valueOf(toolResult.get("ticketNo")));
@@ -157,6 +176,11 @@ public class WorkflowAgent {
         return value == null || value.toString().isBlank() || "null".equals(value.toString());
     }
 
+    private static String text(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
     private String buildDescription(WorkflowDef def, Map<String, Object> slots) {
         StringBuilder sb = new StringBuilder(def.title()).append('\n');
         slots.forEach((k, v) -> sb.append(k).append(": ").append(v).append('\n'));
@@ -167,8 +191,43 @@ public class WorkflowAgent {
         if (Boolean.FALSE.equals(result.get("success"))) {
             return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
         }
+        if ("ticket_create".equals(def.tool()) && result.get("ticketNo") != null) {
+            return "待办已记下。编号：" + result.get("ticketNo")
+                    + "，当前状态：" + TicketStatus.zhOf(String.valueOf(result.getOrDefault("status", "CREATED")));
+        }
+        if (result.get("items") instanceof List<?> items) {
+            if (items.isEmpty()) {
+                return "目前没有待办。可以说「加个待办：…」记一条。";
+            }
+            int total = result.get("count") instanceof Number n ? n.intValue() : items.size();
+            StringBuilder sb = new StringBuilder();
+            sb.append("你现在有 ").append(total).append(" 条待办");
+            if (total > items.size()) {
+                sb.append("（先列出最近 ").append(items.size()).append(" 条）");
+            }
+            sb.append("：\n");
+            int i = 1;
+            for (Object row : items) {
+                if (row instanceof Map<?, ?> map) {
+                    String label = text(map, "statusLabel");
+                    if (label.isBlank()) {
+                        label = text(map, "status");
+                    }
+                    sb.append(i++).append(". ")
+                            .append(text(map, "ticketNo"))
+                            .append("  ")
+                            .append(text(map, "title"))
+                            .append("  ·  ")
+                            .append(label)
+                            .append('\n');
+                }
+            }
+            sb.append("改状态请到控制台「待办」。要看某一条，把编号发我即可。");
+            return sb.toString().strip();
+        }
         if (result.get("ticketNo") != null) {
-            return "待办已记下。编号：" + result.get("ticketNo") + "，当前状态：" + result.getOrDefault("status", "CREATED");
+            return "待办 " + result.get("ticketNo") + "「" + result.getOrDefault("title", "")
+                    + "」当前状态：" + result.getOrDefault("statusLabel", result.getOrDefault("status", ""));
         }
         if (result.get("orderNo") != null) {
             return """

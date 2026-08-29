@@ -36,7 +36,7 @@ public class IntentRouterAgent {
             - 问自己的文档、笔记、博客、怎么做、是什么 → knowledge_rag
             - 帮我记一下、备忘、写进知识库 → memo
             - 待办、提醒我、别忘了 → todo
-            - 查待办、待办编号、事项进度 → todo_query
+            - 有哪些待办、待办列表、查待办、事项进度 → todo_query
             - 盗刷、欺诈、举报 → compliance_checker
             - 点奶茶、点咖啡、下午茶、口渴、加班喝一杯、再来一杯 → milk_tea
             - 写博客、发文章、存草稿、帮我写成博文、发布到博客 → blog_article
@@ -53,7 +53,7 @@ public class IntentRouterAgent {
             1. 问知识库里的笔记 / 文档
             2. 记一笔到知识库
             3. 加一条待办
-            4. 查待办进度
+            4. 看待办列表 / 查进度
             5. 写博客 / 存草稿
             6. 点一杯奶茶（演示）
             7. 随便聊聊
@@ -147,7 +147,11 @@ public class IntentRouterAgent {
         if (containsAny(msg, "记一下", "记下", "备忘", "记一笔", "写进知识库", "存到知识库")) {
             return "memo";
         }
-        if (containsAny(msg, "待办号", "查待办", "事项进度", "待办编号")) {
+        if (containsAny(msg, "待办号", "查待办", "事项进度", "待办编号", "哪些待办", "哪些代办",
+                "待办列表", "代办列表", "有什么待办", "有哪些代办")) {
+            return "todo_query";
+        }
+        if (containsAny(msg, "待办", "代办") && containsAny(msg, "哪些", "列表", "全部", "有什么", "都有", "查")) {
             return "todo_query";
         }
         if (containsAny(msg, "待办", "提醒我", "别忘了", "记个待办")) {

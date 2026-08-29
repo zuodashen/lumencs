@@ -47,8 +47,8 @@ public final class WorkflowCatalog {
             case "todo_query" -> new WorkflowDef(
                     "todo_query",
                     "查待办",
-                    "输入待办编号即可看进度。",
-                    List.of(new WorkflowSlot("ticketNo", "text", "待办编号", true, List.of())),
+                    "没有编号时列出最近待办；有编号则查这一条。",
+                    List.of(new WorkflowSlot("ticketNo", "text", "待办编号", false, List.of())),
                     "ticket_query"
             );
             case "milk_tea" -> new WorkflowDef(
@@ -177,6 +177,12 @@ public final class WorkflowCatalog {
             String body = message.replaceFirst("^(帮我)?(记个待办|待办|提醒我|别忘了)[：:，,\\s]*", "").trim();
             if (!body.isBlank()) {
                 found.put("title", body.length() > 40 ? body.substring(0, 40) : body);
+            }
+        }
+        if ("todo_query".equals(intent)) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("TK-\\d{8}-\\w+").matcher(message);
+            if (matcher.find()) {
+                found.put("ticketNo", matcher.group());
             }
         }
         return found;

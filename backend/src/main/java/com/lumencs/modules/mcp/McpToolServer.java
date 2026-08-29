@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.service.KnowledgeService;
 import com.lumencs.rag.RagHit;
 import com.lumencs.model.entity.Ticket;
+import com.lumencs.model.entity.TicketStatus;
 import com.lumencs.service.TicketService;
 import com.lumencs.tracing.AgentTracer;
 import org.slf4j.Logger;
@@ -61,6 +62,7 @@ public class McpToolServer {
         List<Map<String, Object>> tools = new ArrayList<>();
         tools.add(tool("ticket_create", "创建待办事项", List.of("title", "description", "priority", "session_id", "user_label")));
         tools.add(tool("ticket_query", "按编号查询待办", List.of("ticket_no")));
+        tools.add(tool("ticket_list", "列出最近待办及状态", List.of()));
         tools.add(tool("memo_save", "把备忘写入个人知识库", List.of("title", "content")));
         tools.add(tool("kb_search", "检索内部知识库", List.of("query")));
         tools.add(tool("blog_search", "检索个人博客已发布文章", List.of("query")));
@@ -176,8 +178,11 @@ public class McpToolServer {
                 yield ticket == null
                         ? Map.of("success", false, "error", "未找到待办")
                         : Map.of("success", true, "ticketNo", ticket.getTicketNo(),
-                        "status", ticket.getStatus(), "title", ticket.getTitle());
+                        "status", ticket.getStatus(),
+                        "statusLabel", TicketStatus.zhOf(ticket.getStatus()),
+                        "title", ticket.getTitle());
             }
+            case "ticket_list" -> ticketList();
             case "memo_save" -> {
                 String title = str(args, "title");
                 String content = str(args, "content");
@@ -207,6 +212,26 @@ public class McpToolServer {
             case "tea_order" -> teaOrder(args);
             default -> Map.of("success", false, "error", "unknown tool: " + name);
         };
+    }
+
+    private Map<String, Object> ticketList() {
+        List<Ticket> all = ticketService.list();
+        List<Map<String, Object>> items = new ArrayList<>();
+        int limit = Math.min(20, all.size());
+        for (int i = 0; i < limit; i++) {
+            Ticket ticket = all.get(i);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("ticketNo", ticket.getTicketNo());
+            row.put("title", ticket.getTitle());
+            row.put("status", ticket.getStatus());
+            row.put("statusLabel", TicketStatus.zhOf(ticket.getStatus()));
+            items.add(row);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("count", all.size());
+        result.put("items", items);
+        return result;
     }
 
     private Map<String, Object> blockedWrite() {

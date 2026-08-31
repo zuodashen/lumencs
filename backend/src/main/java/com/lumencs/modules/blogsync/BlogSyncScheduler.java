@@ -31,7 +31,7 @@ public class BlogSyncScheduler {
         this.settings = settings;
     }
 
-    @Scheduled(cron = "${lumencs.blog.sync-cron}")
+    @Scheduled(cron = "${lumencs.blog.sync-cron:0 0 */6 * * *}")
     public void sync() {
         if (!blogClient.enabled() || !settings.isEnabled()) {
             return;

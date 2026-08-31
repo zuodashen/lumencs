@@ -249,10 +249,11 @@ public final class WorkflowCatalog {
             found.put("query", message);
         }
         if ("blog_list".equals(intent)) {
-            String q = message.replaceAll("列出已发布的博客|已发布的博客|已发布博客|博客列表|文章列表|列出博客|我发过的|博客有哪些", " ")
-                    .replaceAll("[：:，,\\s]+", " ")
+            String q = message.replaceAll("列出已发布的博客|已发布的博客|已发布博客|博客列表|文章列表|列出博客|我发过的|博客有哪些|最新的一篇博客文章|最新一篇博客|最新博客|最近一篇博客|最近发布|发布博客是什么时候|博客文章是什么时候|查询最近一下", " ")
+                    .replaceAll("[：:，,？?。！\\s]+", " ")
                     .trim();
-            if (!q.isBlank() && q.length() <= 40) {
+            if (!q.isBlank() && q.length() <= 24
+                    && !q.contains("什么") && !q.contains("时候") && !q.contains("查询") && !q.contains("最近")) {
                 found.put("query", q);
             }
         }

@@ -1,48 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import KlineChart from './KlineChart.vue'
 
 const props = defineProps<{ embed: Record<string, any> }>()
 
-const tab = ref<'overview' | 'news'>('overview')
+const tab = ref<'overview' | 'kline' | 'news'>('overview')
+const openChart = ref(false)
 const quote = computed(() => props.embed.quote || {})
 const score = computed(() => props.embed.score || {})
 const summary = computed(() => props.embed.summary || {})
 const news = computed(() => (Array.isArray(props.embed.news) ? props.embed.news : []) as any[])
 const tags = computed(() => (Array.isArray(score.value.tags) ? score.value.tags : []) as any[])
+const klines = computed(() => (Array.isArray(props.embed.klines) ? props.embed.klines : []) as any[])
 const up = computed(() => Number(quote.value.change_pct || 0) >= 0)
 const marketLabel = computed(() => {
   const m = String(props.embed.market || 'CN').toUpperCase()
   if (m === 'HK') return '港股'
   if (m === 'US') return '美股'
   return 'A股'
-})
-
-const bars = computed(() => {
-  const rows = Array.isArray(props.embed.klines) ? props.embed.klines.slice(-30) : []
-  const highs = rows.map((r: any) => Number(r.high || r.close || 0)).filter((n: number) => n > 0)
-  const lows = rows.map((r: any) => Number(r.low || r.close || 0)).filter((n: number) => n > 0)
-  const max = Math.max(...highs, 1)
-  const min = Math.min(...lows, max - 1)
-  const span = Math.max(max - min, 0.01)
-  const w = 7
-  const h = 88
-  return rows.map((row: any, i: number) => {
-    const open = Number(row.open || row.close || 0)
-    const close = Number(row.close || 0)
-    const high = Number(row.high || close)
-    const low = Number(row.low || close)
-    const y = (v: number) => ((max - v) / span) * (h - 8) + 4
-    const bodyTop = y(Math.max(open, close))
-    const bodyBot = y(Math.min(open, close))
-    return {
-      x: i * w + 2,
-      wickY1: y(high),
-      wickY2: y(low),
-      bodyY: bodyTop,
-      bodyH: Math.max(bodyBot - bodyTop, 1.2),
-      up: close >= open,
-    }
-  })
 })
 
 function num(v: unknown, digits = 2) {
@@ -93,6 +68,11 @@ const actionClass = computed(() => {
   if (a === 'buy') return 'badge-buy'
   return 'badge-watch'
 })
+
+function showKline() {
+  tab.value = 'kline'
+  openChart.value = true
+}
 </script>
 
 <template>
@@ -103,7 +83,7 @@ const actionClass = computed(() => {
           {{ marketLabel }} · {{ embed.symbol }}
         </p>
         <h3 class="mt-1 text-lg font-semibold">{{ embed.name }}</h3>
-        <p class="muted mt-0.5 text-xs">现价、迷你 K 线、技术标签与新闻，数据来自盯盘侠</p>
+        <p class="muted mt-0.5 text-xs">现价、迷你 K 线、技术标签与新闻，数据来自盯盘侠。点 K 线可放大。</p>
       </div>
       <a
         v-if="embed.openUrl"
@@ -116,6 +96,7 @@ const actionClass = computed(() => {
 
     <div class="mt-3 flex gap-2 px-4 text-xs">
       <button class="chip" :class="tab === 'overview' ? 'border-[var(--accent)] text-[var(--accent)]' : ''" @click="tab = 'overview'">总览</button>
+      <button class="chip" :class="tab === 'kline' ? 'border-[var(--accent)] text-[var(--accent)]' : ''" @click="showKline">K线</button>
       <button class="chip" :class="tab === 'news' ? 'border-[var(--accent)] text-[var(--accent)]' : ''" @click="tab = 'news'">
         新闻 ({{ news.length }})
       </button>
@@ -139,36 +120,15 @@ const actionClass = computed(() => {
         </div>
       </div>
 
-      <div class="rounded-2xl border border-[var(--line)] bg-[#0c1018] p-4">
+      <button type="button" class="rounded-2xl border border-[var(--line)] bg-[#0c1018] p-4 text-left hover:border-[var(--accent)]" @click="showKline">
         <div class="mb-2 flex items-center justify-between">
-          <p class="text-xs text-[var(--muted)]">迷你 K 线</p>
+          <p class="text-xs text-[var(--muted)]">迷你 K 线 · 点击放大</p>
           <span class="badge-action" :class="actionClass">
             {{ score.actionLabel || '—' }}
             <em v-if="score.score != null">{{ Number(score.score) > 0 ? '+' : '' }}{{ score.score }}</em>
           </span>
         </div>
-        <svg v-if="bars.length" viewBox="0 0 220 88" class="h-24 w-full">
-          <line
-            v-for="(bar, i) in bars"
-            :key="'w' + i"
-            :x1="bar.x + 2"
-            :x2="bar.x + 2"
-            :y1="bar.wickY1"
-            :y2="bar.wickY2"
-            :stroke="bar.up ? '#ff5a6a' : '#3dd68c'"
-            stroke-width="1"
-          />
-          <rect
-            v-for="(bar, i) in bars"
-            :key="'b' + i"
-            :x="bar.x"
-            :y="bar.bodyY"
-            width="4"
-            :height="bar.bodyH"
-            :fill="bar.up ? '#ff5a6a' : '#3dd68c'"
-            rx="0.5"
-          />
-        </svg>
+        <KlineChart v-if="klines.length" :klines="klines.slice(-30)" :height="88" />
         <p v-else class="muted py-8 text-center text-xs">暂无 K 线</p>
         <div class="mt-3 flex flex-wrap gap-1.5">
           <span
@@ -178,6 +138,16 @@ const actionClass = computed(() => {
             :class="tag.tone === 'up' ? 'tone-up' : tag.tone === 'down' ? 'tone-down' : 'tone-neutral'"
           >{{ tag.label }}</span>
         </div>
+      </button>
+    </div>
+
+    <div v-else-if="tab === 'kline'" class="p-4">
+      <div class="mb-2 flex items-center justify-between">
+        <p class="text-xs text-[var(--muted)]">日 K · 蓝 MA5 · 橙 MA10 · 紫 MA20 · 悬停看 OHLC</p>
+        <button class="chip" @click="openChart = true">全屏</button>
+      </div>
+      <div class="rounded-2xl border border-[var(--line)] bg-[#0c1018] p-3">
+        <KlineChart :klines="klines" :height="260" interactive />
       </div>
     </div>
 
@@ -198,6 +168,17 @@ const actionClass = computed(() => {
 
     <p class="muted px-4 pb-3 text-[11px]">{{ score.reason || '仅供参考，不是投资建议。' }}</p>
   </section>
+
+  <div v-if="openChart" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" @click.self="openChart = false">
+    <div class="w-full max-w-4xl rounded-2xl border border-[var(--line)] bg-[#12151c] p-4">
+      <div class="mb-3 flex items-center justify-between">
+        <p class="font-medium">{{ embed.name }} {{ embed.symbol }} · 日 K</p>
+        <button class="chip" @click="openChart = false">关闭</button>
+      </div>
+      <KlineChart :klines="klines" :height="360" interactive />
+      <p class="muted mt-2 text-xs">蓝 MA5 · 橙 MA10 · 紫 MA20。数据来自盯盘侠，仅供参考。</p>
+    </div>
+  </div>
 </template>
 
 <style scoped>

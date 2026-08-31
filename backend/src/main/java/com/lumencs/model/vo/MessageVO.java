@@ -20,6 +20,7 @@ public class MessageVO {
     private String content;
     private String intent;
     private List<Map<String, Object>> citations;
+    private Map<String, Object> embed;
     private LocalDateTime createdAt;
 
     public static MessageVO from(ChatMessage message, ObjectMapper objectMapper) {
@@ -36,6 +37,13 @@ public class MessageVO {
             }
         } catch (Exception ignored) {
             vo.setCitations(List.of());
+        }
+        try {
+            if (message.getEmbedJson() != null && !message.getEmbedJson().isBlank()) {
+                vo.setEmbed(objectMapper.readValue(message.getEmbedJson(), new TypeReference<>() {}));
+            }
+        } catch (Exception ignored) {
+            vo.setEmbed(null);
         }
         return vo;
     }

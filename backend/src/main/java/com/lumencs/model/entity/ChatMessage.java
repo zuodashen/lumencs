@@ -17,5 +17,6 @@ public class ChatMessage {
     private String content;
     private String intent;
     private String citationsJson;
+    private String embedJson;
     private LocalDateTime createdAt;
 }

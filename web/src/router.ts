@@ -4,6 +4,7 @@ import LoginView from './views/LoginView.vue'
 import HubShell from './components/HubShell.vue'
 import HubHomeView from './views/HubHomeView.vue'
 import AppsView from './views/AppsView.vue'
+import PlaybookView from './views/PlaybookView.vue'
 import KnowledgeView from './views/console/KnowledgeView.vue'
 import TicketsView from './views/console/TicketsView.vue'
 import TracesView from './views/console/TracesView.vue'
@@ -26,6 +27,7 @@ const router = createRouter({
         { path: '', name: 'home', component: HubHomeView },
         { path: 'chat', name: 'chat', component: ChatView },
         { path: 'apps', name: 'apps', component: AppsView },
+        { path: 'playbook', name: 'playbook', component: PlaybookView },
         { path: 'console', redirect: '/' },
         { path: 'console/overview', redirect: '/' },
         { path: 'console/inbox', component: InboxView },

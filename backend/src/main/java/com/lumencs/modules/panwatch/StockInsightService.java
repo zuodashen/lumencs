@@ -50,7 +50,7 @@ public class StockInsightService {
             if (name.isBlank()) {
                 name = str(quote, "name");
             }
-            Map<String, Object> klineBody = panWatchClient.klines(symbol, market, 36);
+            Map<String, Object> klineBody = panWatchClient.klines(symbol, market, 60);
             Map<String, Object> summaryBody = panWatchClient.klineSummary(symbol, market);
             @SuppressWarnings("unchecked")
             Map<String, Object> summary = summaryBody.get("summary") instanceof Map<?, ?> map

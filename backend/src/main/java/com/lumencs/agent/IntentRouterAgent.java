@@ -181,7 +181,11 @@ public class IntentRouterAgent {
                 || (msg.contains("同步") && containsAny(msg, "这篇", "该篇") && containsAny(msg, "博客", "文章"))) {
             return "blog_sync";
         }
-        if (containsAny(msg, "博客列表", "已发布的博客", "已发布博客", "文章列表", "列出博客", "我发过的", "博客有哪些")) {
+        if (containsAny(msg, "博客列表", "已发布的博客", "已发布博客", "文章列表", "列出博客",
+                "我发过的", "博客有哪些", "最新博客", "最近发布", "最近一篇博客", "最新一篇博客")) {
+            return "blog_list";
+        }
+        if (msg.contains("博客") && containsAny(msg, "什么时候", "最新的一篇", "最近一篇", "最近一下")) {
             return "blog_list";
         }
         if (containsAny(msg, "书签列表", "我的书签", "列出书签", "收藏夹", "书签有哪些")) {

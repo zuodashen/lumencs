@@ -43,9 +43,9 @@ const modules = computed(() => {
 const tools = [
   { to: '/chat?q=' + encodeURIComponent('帮我记一下：'), label: '记一笔', icon: 'file', color: '#5b8def' },
   { to: '/chat?q=' + encodeURIComponent('加个待办：'), label: '新待办', icon: 'plus', color: '#3dd6c6' },
-  { to: '/console/knowledge', label: '知识库', icon: 'book', color: '#8b6cff' },
-  { to: '/chat?q=' + encodeURIComponent('我现在有哪些待办'), label: '查待办', icon: 'search', color: '#ff9f43' },
-  { to: '/console/gaps', label: '知识缺口', icon: 'gap', color: '#ff6b7a' },
+  { to: '/chat?q=' + encodeURIComponent('列出已发布的博客'), label: '博客列表', icon: 'book', color: '#8b6cff' },
+  { to: '/chat?q=' + encodeURIComponent('查一下酒鬼酒行情'), label: '查行情', icon: 'chart', color: '#ff6b7a' },
+  { to: '/playbook', label: '场景手册', icon: 'spark', color: '#ff9f43' },
   { to: '/console/knowledge', label: '上传文档', icon: 'upload', color: '#5b8def' },
 ]
 

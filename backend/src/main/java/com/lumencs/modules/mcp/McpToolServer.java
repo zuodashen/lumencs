@@ -325,6 +325,8 @@ public class McpToolServer {
     private static String firstNonBlank(String a, String b) {
         return a == null || a.isBlank() ? (b == null ? "" : b) : a;
     }
+
+    private Map<String, Object> blockedWrite() {
         return Map.of("success", false, "error", blogAdminClient.writeBlockedReason());
     }
 

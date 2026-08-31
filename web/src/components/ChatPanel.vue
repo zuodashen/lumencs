@@ -5,6 +5,7 @@ import InteractiveCard from './InteractiveCard.vue'
 import Icon from './Icon.vue'
 import { api, streamCard, streamChat, type AgentStep, type ChatEmbed, type ChatResult, type Citation, type WorkflowCard } from '../api'
 import ChatEmbedCard from './ChatEmbed.vue'
+import { FEATURED_PROMPTS } from '../playbook'
 
 type ChatItem = {
   role: 'user' | 'assistant'
@@ -41,7 +42,7 @@ let pollTimer: number | null = null
 
 const prompts = articleSlug.value
   ? ['这篇文章在讲什么？', '有哪些关键结论？', '和我手头的项目怎么结合？']
-  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '列出已发布的博客', '查一下酒鬼酒行情']
+  : FEATURED_PROMPTS
 
 onMounted(async () => {
   sessions.value = readSessionList()
@@ -90,6 +91,7 @@ async function loadHistory(silent = false) {
       content: row.content,
       intent: row.intent,
       citations: row.citations || [],
+      embed: row.embed || undefined,
       messageId: row.id,
       reviewPending: typeof row.content === 'string' && row.content.includes('已转人工审核'),
     }))

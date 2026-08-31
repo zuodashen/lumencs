@@ -75,5 +75,21 @@ public class HubSchemaBootstrap implements ApplicationRunner {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """);
         log.info("hub tables ready");
+        addColumnIfMissing("cs_message", "embed_json", "JSON NULL");
+    }
+
+    private void addColumnIfMissing(String table, String column, String ddl) {
+        Integer n = jdbc.queryForObject(
+                """
+                SELECT COUNT(*) FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+                """,
+                Integer.class,
+                table,
+                column);
+        if (n != null && n == 0) {
+            jdbc.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + ddl);
+            log.info("added {}.{}", table, column);
+        }
     }
 }

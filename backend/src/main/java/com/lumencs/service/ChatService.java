@@ -60,7 +60,7 @@ public class ChatService {
     public SseEmitter stream(String sessionId, String userLabel, String message, String articleSlug, boolean hubOperator) {
         String sid = (sessionId == null || sessionId.isBlank()) ? UUID.randomUUID().toString() : sessionId;
         ensureSession(sid, userLabel);
-        saveMessage(sid, "user", message, null, null);
+        saveMessage(sid, "user", message, null, null, null);
         shortTermMemory.addMessage(sid, "user", message);
         return run(sid, userLabel, message, false, articleSlug, hubOperator);
     }
@@ -79,7 +79,7 @@ public class ChatService {
         }
         workingMemory.mergeSlots(sid, values);
         String summary = cardSummary(values);
-        saveMessage(sid, "user", summary, cardId, null);
+        saveMessage(sid, "user", summary, cardId, null, null);
         shortTermMemory.addMessage(sid, "user", summary);
         return run(sid, userLabel, summary, true, null, hubOperator);
     }
@@ -113,7 +113,8 @@ public class ChatService {
                 state.setArticleSlug(articleSlug);
                 state.setHubOperator(hubOperator);
                 AgentState result = supervisorAgent.orchestrate(state, new EmitterSink(emitter));
-                var saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(), result.getCitations());
+                var saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(),
+                        result.getCitations(), result.getEmbed());
                 shortTermMemory.addMessage(sid, "assistant", result.getFinalResponse());
                 Map<String, Object> done = new LinkedHashMap<>();
                 done.put("sessionId", sid);
@@ -151,7 +152,7 @@ public class ChatService {
         SseEmitter emitter = new SseEmitter(30_000L);
         try {
             send(emitter, "session", Map.of("sessionId", sid));
-            saveMessage(sid, "assistant", text, null, null);
+            saveMessage(sid, "assistant", text, null, null, null);
             Map<String, Object> done = new LinkedHashMap<>();
             done.put("sessionId", sid);
             done.put("content", text);
@@ -193,7 +194,8 @@ public class ChatService {
         sessionMapper.insert(session);
     }
 
-    private ChatMessage saveMessage(String sid, String role, String content, String intent, List<Map<String, Object>> citations) {
+    private ChatMessage saveMessage(String sid, String role, String content, String intent,
+                                   List<Map<String, Object>> citations, Map<String, Object> embed) {
         ChatMessage msg = new ChatMessage();
         msg.setSessionId(sid);
         msg.setRole(role);
@@ -205,6 +207,13 @@ public class ChatService {
                 msg.setCitationsJson(objectMapper.writeValueAsString(citations));
             } catch (JsonProcessingException ignored) {
                 msg.setCitationsJson("[]");
+            }
+        }
+        if (embed != null && !embed.isEmpty()) {
+            try {
+                msg.setEmbedJson(objectMapper.writeValueAsString(embed));
+            } catch (JsonProcessingException ignored) {
+                msg.setEmbedJson(null);
             }
         }
         messageMapper.insert(msg);

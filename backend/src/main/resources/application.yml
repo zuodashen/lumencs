@@ -74,19 +74,19 @@ lumencs:
   memory:
     max-turns: 20
     ttl-minutes: 30
-    blog:
-      base-url: ${BLOG_BASE_URL:}
-      sync-cron: ${BLOG_SYNC_CRON:0 0 */6 * * *}
-      sync-enabled: ${BLOG_SYNC_ENABLED:true}
-      write-enabled: ${BLOG_WRITE_ENABLED:false}
-      admin-username: ${BLOG_ADMIN_USERNAME:}
-      admin-password: ${BLOG_ADMIN_PASSWORD:}
-      public-web-url: ${BLOG_PUBLIC_WEB_URL:}
-    panwatch:
-      base-url: ${PANWATCH_BASE_URL:}
-      username: ${PANWATCH_USERNAME:}
-      password: ${PANWATCH_PASSWORD:}
-      public-web-url: ${PANWATCH_PUBLIC_WEB_URL:}
+  blog:
+    base-url: ${BLOG_BASE_URL:}
+    sync-cron: ${BLOG_SYNC_CRON:0 0 */6 * * *}
+    sync-enabled: ${BLOG_SYNC_ENABLED:true}
+    write-enabled: ${BLOG_WRITE_ENABLED:false}
+    admin-username: ${BLOG_ADMIN_USERNAME:}
+    admin-password: ${BLOG_ADMIN_PASSWORD:}
+    public-web-url: ${BLOG_PUBLIC_WEB_URL:}
+  panwatch:
+    base-url: ${PANWATCH_BASE_URL:}
+    username: ${PANWATCH_USERNAME:}
+    password: ${PANWATCH_PASSWORD:}
+    public-web-url: ${PANWATCH_PUBLIC_WEB_URL:}
   sla:
     waiting-human-minutes: ${SLA_WAITING_HUMAN_MINUTES:120}
     scan-ms: ${SLA_SCAN_MS:60000}

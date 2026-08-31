@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS cs_message (
     content        MEDIUMTEXT   NOT NULL,
     intent         VARCHAR(64)  DEFAULT NULL,
     citations_json JSON         DEFAULT NULL,
+    embed_json     JSON         DEFAULT NULL,
     created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_msg_session (session_id, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

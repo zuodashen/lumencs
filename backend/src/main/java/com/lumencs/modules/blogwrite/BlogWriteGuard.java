@@ -12,6 +12,8 @@ public final class BlogWriteGuard {
     private BlogWriteGuard() {}
 
     public static boolean isWriteIntent(String intent) {
-        return intent != null && intent.startsWith("blog_");
+        return "blog_article".equals(intent)
+                || "blog_bookmark".equals(intent)
+                || "blog_tag".equals(intent);
     }
 }

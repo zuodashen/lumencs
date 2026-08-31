@@ -74,7 +74,8 @@ public class SupervisorAgent {
                             "已记录您的安全相关诉求。建议通过官方渠道核实，并等待人工客服介入。");
                 }
                 if (!state.isWaitingCard() && !state.isReviewPending()
-                        && (state.getIntent() == null || !state.getIntent().startsWith("blog_"))) {
+                        && (state.getIntent() == null
+                        || !(state.getIntent().startsWith("blog_") || "stock_quote".equals(state.getIntent())))) {
                     complianceAgent.process(state, sink);
                 }
             }

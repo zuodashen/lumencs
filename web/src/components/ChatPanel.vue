@@ -3,7 +3,8 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import InteractiveCard from './InteractiveCard.vue'
 import Icon from './Icon.vue'
-import { api, streamCard, streamChat, type AgentStep, type ChatResult, type Citation, type WorkflowCard } from '../api'
+import { api, streamCard, streamChat, type AgentStep, type ChatEmbed, type ChatResult, type Citation, type WorkflowCard } from '../api'
+import ChatEmbedCard from './ChatEmbed.vue'
 
 type ChatItem = {
   role: 'user' | 'assistant'
@@ -12,6 +13,7 @@ type ChatItem = {
   intent?: string
   card?: WorkflowCard
   cardDone?: boolean
+  embed?: ChatEmbed
   messageId?: number
   reviewPending?: boolean
   feedback?: 'UP' | 'DOWN'
@@ -39,7 +41,7 @@ let pollTimer: number | null = null
 
 const prompts = articleSlug.value
   ? ['这篇文章在讲什么？', '有哪些关键结论？', '和我手头的项目怎么结合？']
-  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '我现在有哪些待办', '帮我写一篇博客草稿']
+  : ['帮我记一下：生椰拿铁少糖少冰', '加个待办：周五把周报交了', '列出已发布的博客', '查一下酒鬼酒行情']
 
 onMounted(async () => {
   sessions.value = readSessionList()
@@ -82,7 +84,7 @@ async function loadHistory(silent = false) {
   try {
     const rows = await api.history(sessionId.value)
     if (!Array.isArray(rows) || !rows.length) return
-    if (silent && messages.value.some((m) => m.card && !m.cardDone)) return
+    if (silent && messages.value.some((m) => (m.card && !m.cardDone) || m.embed)) return
     const mapped: ChatItem[] = rows.map((row: any) => ({
       role: row.role === 'user' ? 'user' : 'assistant',
       content: row.content,
@@ -92,11 +94,13 @@ async function loadHistory(silent = false) {
       reviewPending: typeof row.content === 'string' && row.content.includes('已转人工审核'),
     }))
     if (silent && mapped.length <= messages.value.filter((m) => m.content).length) return
-    const cards = messages.value.filter((m) => m.card)
+    const extras = messages.value.filter((m) => m.card || m.embed)
     messages.value = mapped
-    for (const card of cards) {
-      if (!messages.value.some((m) => m.card?.cardId === card.card?.cardId)) {
-        messages.value.push(card)
+    for (const extra of extras) {
+      if (extra.card && !messages.value.some((m) => m.card?.cardId === extra.card?.cardId)) {
+        messages.value.push(extra)
+      } else if (extra.embed && !messages.value.some((m) => m.embed === extra.embed)) {
+        messages.value.push(extra)
       }
     }
   } catch {
@@ -121,9 +125,17 @@ const sseHandler = {
   onCard(card: WorkflowCard) {
     messages.value.push({ role: 'assistant', content: '', card })
   },
+  onEmbed(embed: ChatEmbed) {
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.role === 'assistant') {
+      last.embed = embed
+      return
+    }
+    messages.value.push({ role: 'assistant', content: '', embed })
+  },
   onToken(delta: string) {
     const last = messages.value[messages.value.length - 1]
-    if (last && last.role === 'assistant' && !last.card) {
+    if (last && last.role === 'assistant' && !last.card && !last.embed) {
       last.content += delta
       return
     }
@@ -137,12 +149,13 @@ const sseHandler = {
       citations: msg.citations,
       messageId: msg.messageId,
       reviewPending: msg.reviewPending,
+      embed: msg.embed || last?.embed,
     }
     if (last?.card && !last.content) {
       Object.assign(last, patch)
       return
     }
-    if (last && last.role === 'assistant' && !last.card) {
+    if (last && last.role === 'assistant' && (!last.card || last.content || last.embed)) {
       Object.assign(last, patch)
       return
     }
@@ -365,12 +378,16 @@ function onKey(e: KeyboardEvent) {
       </div>
       <div ref="listEl" class="flex-1 space-y-4 overflow-y-auto p-4">
         <div v-if="!messages.length">
-          <p class="text-sm leading-relaxed">你好，我是你的个人助手。可以记笔记、看待办、写博客草稿。</p>
+          <p class="text-sm leading-relaxed">你好，我是你的个人助手。可以记笔记、看待办、列出已发布博客，或查一只股票行情。</p>
           <div class="mt-3 flex flex-wrap gap-2">
             <button v-for="item in prompts" :key="item" class="chip" @click="send(item)">{{ item }}</button>
           </div>
         </div>
-        <article v-for="(msg, idx) in messages" :key="idx" class="max-w-[92%]" :class="msg.role === 'user' ? 'ml-auto' : ''">
+        <article
+          v-for="(msg, idx) in messages"
+          :key="idx"
+          :class="[msg.role === 'user' ? 'ml-auto' : '', msg.embed?.kind === 'stock' ? 'max-w-full' : 'max-w-[92%]']"
+        >
           <p class="mb-1 text-[11px] uppercase tracking-wider text-[var(--muted)]">
             {{ msg.role === 'user' ? '你' : 'Lumen' }}
           </p>
@@ -382,6 +399,7 @@ function onKey(e: KeyboardEvent) {
             {{ msg.content }}
           </div>
           <InteractiveCard v-if="msg.card" :card="msg.card" :disabled="msg.cardDone || loading" @submit="(values) => submitCard(msg, values)" />
+          <ChatEmbedCard v-if="msg.embed" :embed="msg.embed" :busy="loading" @prompt="send" />
           <div v-if="msg.citations?.length" class="mt-2 space-y-1">
             <button
               v-for="cite in msg.citations"

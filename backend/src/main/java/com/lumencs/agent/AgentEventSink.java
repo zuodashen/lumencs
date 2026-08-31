@@ -8,6 +8,9 @@ public interface AgentEventSink {
     default void card(Map<String, Object> card) {
     }
 
+    default void embed(Map<String, Object> embed) {
+    }
+
     default void token(String delta) {
     }
 }

@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * 博客定时同步：按 {@code lumencs.blog.sync-cron}（默认每 6 小时）拉取博客公开文章进知识库。
- * 未配置 BLOG_BASE_URL 时静默跳过；控制台手动按钮仍可用。
+ * 未配置 BLOG_BASE_URL、或控制台关掉定时开关时静默跳过；手动同步仍可用。
  */
 @Component
 public class BlogSyncScheduler {
@@ -20,15 +20,20 @@ public class BlogSyncScheduler {
 
     private final BlogSyncService blogSyncService;
     private final BlogClient blogClient;
+    private final BlogSyncSettings settings;
 
-    public BlogSyncScheduler(BlogSyncService blogSyncService, BlogClient blogClient) {
+    public BlogSyncScheduler(
+            BlogSyncService blogSyncService,
+            BlogClient blogClient,
+            BlogSyncSettings settings) {
         this.blogSyncService = blogSyncService;
         this.blogClient = blogClient;
+        this.settings = settings;
     }
 
     @Scheduled(cron = "${lumencs.blog.sync-cron}")
     public void sync() {
-        if (!blogClient.enabled()) {
+        if (!blogClient.enabled() || !settings.isEnabled()) {
             return;
         }
         try {

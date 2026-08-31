@@ -20,7 +20,8 @@ public class IntentRouterAgent {
     private static final Set<String> INTENTS = Set.of(
             "knowledge_rag", "memo", "todo", "todo_query", "todo_update",
             "compliance_checker", "milk_tea", "chitchat",
-            "blog_article", "blog_bookmark", "blog_tag"
+            "blog_article", "blog_bookmark", "blog_tag", "blog_list", "blog_bookmarks", "blog_sync",
+            "stock_quote"
     );
 
     /** 低于该置信度触发澄清（LLM 兜底默认 0.6，仅 LLM 明确低置信才澄清） */
@@ -31,18 +32,22 @@ public class IntentRouterAgent {
     private static final String SYSTEM_PROMPT = """
             你是意图识别Agent。只返回 JSON，格式：{"intent": "...", "confidence": 0.0-1.0}
             intent 只能是以下之一：
-            knowledge_rag, memo, todo, todo_query, todo_update, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag
+            knowledge_rag, memo, todo, todo_query, todo_update, compliance_checker, milk_tea, chitchat, blog_article, blog_bookmark, blog_tag, blog_list, blog_bookmarks, blog_sync, stock_quote
             规则：
-            - 问自己的文档、笔记、博客、怎么做、是什么 → knowledge_rag
+            - 问自己的文档、笔记、博客正文、怎么做、是什么 → knowledge_rag
             - 帮我记一下、备忘、写进知识库 → memo
             - 加待办、提醒我、别忘了 → todo
             - 有哪些待办、待办列表、查待办、事项进度 → todo_query
             - 修改待办、改成进行中/已完成、把 TK- 改状态 → todo_update
             - 盗刷、欺诈、举报 → compliance_checker
             - 点奶茶、点咖啡、下午茶、口渴、加班喝一杯、再来一杯 → milk_tea
+            - 列出已发布博客、博客列表、我发过哪些文章 → blog_list
+            - 书签列表、我的书签、列出收藏 → blog_bookmarks
+            - 同步这篇博客、把某篇文章同步到知识库 → blog_sync
             - 写博客、发文章、存草稿、帮我写成博文、发布到博客 → blog_article
-            - 收藏链接、加书签、收藏这个网址 → blog_bookmark
+            - 收藏链接、加书签、收藏这个网址（新建，不是列表） → blog_bookmark
             - 新建标签、创建一个文章标签（不是给书签打标签） → blog_tag
+            - 查某只股票、行情、K线、现价、盯盘侠 → stock_quote
             - 问候、闲聊、你是谁、日常问题、心情天气 → chitchat
             confidence：表述明确时接近 1.0。
             闲聊请给 0.7 以上，不要把「你好」标成低置信去澄清。
@@ -56,9 +61,10 @@ public class IntentRouterAgent {
             3. 加一条待办
             4. 看待办列表 / 查进度
             5. 改待办状态
-            6. 写博客 / 存草稿
-            7. 点一杯奶茶（演示）
-            8. 随便聊聊
+            6. 写博客 / 存草稿 / 看已发布列表 / 同步一篇
+            7. 查一只股票行情
+            8. 点一杯奶茶（演示）
+            9. 随便聊聊
             请再说具体一点。""";
 
     private final ChatClient chatClient;
@@ -171,6 +177,16 @@ public class IntentRouterAgent {
         if (containsAny(msg, "奶茶", "咖啡", "点单", "下午茶", "口渴", "生椰", "伯牙", "再来一杯")) {
             return "milk_tea";
         }
+        if (containsAny(msg, "同步这篇博客", "同步博客", "同步这篇文章", "同步到知识库")
+                || (msg.contains("同步") && containsAny(msg, "这篇", "该篇") && containsAny(msg, "博客", "文章"))) {
+            return "blog_sync";
+        }
+        if (containsAny(msg, "博客列表", "已发布的博客", "已发布博客", "文章列表", "列出博客", "我发过的", "博客有哪些")) {
+            return "blog_list";
+        }
+        if (containsAny(msg, "书签列表", "我的书签", "列出书签", "收藏夹", "书签有哪些")) {
+            return "blog_bookmarks";
+        }
         if (containsAny(msg, "写博客", "发文章", "发一篇", "写一篇", "存草稿", "发布文章", "写成博文", "博客草稿")) {
             return "blog_article";
         }
@@ -179,6 +195,13 @@ public class IntentRouterAgent {
         }
         if (containsAny(msg, "新建标签", "创建标签", "加个标签")) {
             return "blog_tag";
+        }
+        if (containsAny(msg, "行情", "K线", "k线", "看盘", "盯盘侠", "现价", "股价")
+                || (msg.contains("股票") && containsAny(msg, "查", "看", "多少", "怎么", "怎样"))) {
+            return "stock_quote";
+        }
+        if (msg.matches("(?s).*\\d{6}.*") && containsAny(msg, "股票", "查", "看", "行情", "多少")) {
+            return "stock_quote";
         }
         if (containsAny(msg, "举报", "欺诈", "盗刷", "泄露")) {
             return "compliance_checker";

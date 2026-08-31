@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.service.KnowledgeService;
+import com.lumencs.service.BlogSyncService;
+import com.lumencs.modules.panwatch.StockInsightService;
 import com.lumencs.rag.RagHit;
 import com.lumencs.model.entity.Ticket;
 import com.lumencs.model.entity.TicketStatus;
@@ -35,6 +37,8 @@ public class McpToolServer {
     private final KnowledgeService knowledgeService;
     private final BlogClient blogClient;
     private final BlogAdminClient blogAdminClient;
+    private final BlogSyncService blogSyncService;
+    private final StockInsightService stockInsightService;
     private final AgentTracer tracer;
     private final ToolLogMapper toolLogMapper;
     private final ObjectMapper objectMapper;
@@ -46,6 +50,8 @@ public class McpToolServer {
             KnowledgeService knowledgeService,
             BlogClient blogClient,
             BlogAdminClient blogAdminClient,
+            BlogSyncService blogSyncService,
+            StockInsightService stockInsightService,
             AgentTracer tracer,
             ToolLogMapper toolLogMapper,
             ObjectMapper objectMapper) {
@@ -53,6 +59,8 @@ public class McpToolServer {
         this.knowledgeService = knowledgeService;
         this.blogClient = blogClient;
         this.blogAdminClient = blogAdminClient;
+        this.blogSyncService = blogSyncService;
+        this.stockInsightService = stockInsightService;
         this.tracer = tracer;
         this.toolLogMapper = toolLogMapper;
         this.objectMapper = objectMapper;
@@ -67,10 +75,14 @@ public class McpToolServer {
         tools.add(tool("memo_save", "把备忘写入个人知识库", List.of("title", "content")));
         tools.add(tool("kb_search", "检索内部知识库", List.of("query")));
         tools.add(tool("blog_search", "检索个人博客已发布文章", List.of("query")));
+        tools.add(tool("blog_list", "列出已发布博客，可在对话里点同步", List.of("query")));
+        tools.add(tool("blog_bookmarks", "列出博客书签分组", List.of()));
         tools.add(tool("blog_get", "按 slug 读取一篇已发布文章", List.of("slug")));
+        tools.add(tool("blog_sync_slug", "把一篇已发布博客同步进本仓知识库", List.of("slug")));
         tools.add(tool("blog_article_upsert", "卡片确认后写入博客文章（默认草稿）", List.of("title", "summary", "content", "category", "tags", "action")));
         tools.add(tool("blog_bookmark_create", "卡片确认后添加博客书签", List.of("name", "link", "description", "category")));
         tools.add(tool("blog_tag_create", "卡片确认后新建文章标签", List.of("name")));
+        tools.add(tool("stock_quote", "查盯盘侠行情 / K 线 / 技术摘要", List.of("query")));
         tools.add(tool("order_query", "查询演示订单（mock）", List.of("order_id")));
         tools.add(tool("tea_order", "工位奶茶下单（演示）", List.of("drink", "size", "sweetness", "ice", "topping", "count", "desk")));
         return tools;
@@ -213,10 +225,14 @@ public class McpToolServer {
                 yield Map.of("success", true, "hits", hits);
             }
             case "blog_search" -> Map.of("success", true, "articles", blogClient.search(str(args, "query")));
+            case "blog_list" -> blogList(args);
+            case "blog_bookmarks" -> blogBookmarkList();
             case "blog_get" -> Map.of("success", true, "article", blogClient.getArticle(str(args, "slug")));
+            case "blog_sync_slug" -> blogSyncSlug(args);
             case "blog_article_upsert" -> blogArticle(args);
             case "blog_bookmark_create" -> blogBookmark(args);
             case "blog_tag_create" -> blogTag(args);
+            case "stock_quote" -> stockInsightService.lookup(firstNonBlank(str(args, "query"), str(args, "symbol")));
             case "order_query" -> {
                 String orderId = str(args, "order_id");
                 yield Map.of(
@@ -252,7 +268,63 @@ public class McpToolServer {
         return result;
     }
 
-    private Map<String, Object> blockedWrite() {
+    private Map<String, Object> blogList(Map<String, Object> args) {
+        if (!blogClient.enabled()) {
+            return Map.of("success", false, "error", "未配置 BLOG_BASE_URL");
+        }
+        List<Map<String, Object>> articles = blogClient.listArticles(str(args, "query"), 1, 30);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (Map<String, Object> article : articles) {
+            String slug = str(article, "slug");
+            if (slug.isBlank()) {
+                slug = str(article, "id");
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("slug", slug);
+            row.put("title", str(article, "title"));
+            row.put("summary", str(article, "summary"));
+            row.put("category", firstNonBlank(str(article, "categoryName"), str(article, "category")));
+            row.put("publishTime", article.get("publishTime"));
+            row.put("url", blogClient.articleUrl(slug));
+            row.put("ingested", knowledgeService.findByBlogSlug(slug) != null);
+            items.add(row);
+        }
+        Map<String, Object> embed = new LinkedHashMap<>();
+        embed.put("kind", "blog_list");
+        embed.put("articles", items);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("count", items.size());
+        result.put("embed", embed);
+        return result;
+    }
+
+    private Map<String, Object> blogBookmarkList() {
+        if (!blogClient.enabled()) {
+            return Map.of("success", false, "error", "未配置 BLOG_BASE_URL");
+        }
+        List<Map<String, Object>> groups = blogClient.listBookmarkGroups();
+        Map<String, Object> embed = new LinkedHashMap<>();
+        embed.put("kind", "bookmark_list");
+        embed.put("groups", groups);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("count", groups.size());
+        result.put("embed", embed);
+        return result;
+    }
+
+    private Map<String, Object> blogSyncSlug(Map<String, Object> args) {
+        try {
+            return blogSyncService.syncSlug(str(args, "slug"));
+        } catch (Exception e) {
+            return Map.of("success", false, "error", e.getMessage() == null ? "同步失败" : e.getMessage());
+        }
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        return a == null || a.isBlank() ? (b == null ? "" : b) : a;
+    }
         return Map.of("success", false, "error", blogAdminClient.writeBlockedReason());
     }
 

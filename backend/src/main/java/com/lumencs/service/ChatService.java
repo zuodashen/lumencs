@@ -127,6 +127,9 @@ public class ChatService {
                 done.put("reviewPending", result.isReviewPending());
                 done.put("reviewId", result.getReviewId());
                 done.put("articleSlug", articleSlug == null ? "" : articleSlug);
+                if (result.getEmbed() != null && !result.getEmbed().isEmpty()) {
+                    done.put("embed", result.getEmbed());
+                }
                 send(emitter, "message", done);
                 send(emitter, "done", Map.of("ok", true));
                 emitter.complete();
@@ -256,6 +259,11 @@ public class ChatService {
         @Override
         public void card(Map<String, Object> card) {
             send(emitter, "card", card);
+        }
+
+        @Override
+        public void embed(Map<String, Object> embed) {
+            send(emitter, "embed", embed);
         }
 
         @Override

@@ -24,6 +24,9 @@ const preview = ref<string[]>([])
 const recallQuery = ref('')
 const recallHits = ref<any[]>([])
 const tab = ref<'upload' | 'recall'>('upload')
+const syncEnabled = ref(true)
+const syncCron = ref('')
+const blogConfigured = ref(true)
 
 const maxPage = () => Math.max(1, Math.ceil(total.value / pageSize))
 
@@ -43,6 +46,10 @@ async function load() {
 onMounted(async () => {
   try {
     await load()
+    const settings = await api.blogSettings() as { syncEnabled?: boolean; syncCron?: string; blogConfigured?: boolean }
+    syncEnabled.value = settings.syncEnabled !== false
+    syncCron.value = settings.syncCron || ''
+    blogConfigured.value = settings.blogConfigured !== false
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败'
   }
@@ -84,6 +91,19 @@ async function removeDoc(id: number) {
     await load()
   } catch (e) {
     error.value = e instanceof Error ? e.message : '删除失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleSync() {
+  error.value = ''
+  saving.value = true
+  try {
+    const settings = await api.updateBlogSettings({ syncEnabled: !syncEnabled.value }) as { syncEnabled?: boolean }
+    syncEnabled.value = settings.syncEnabled !== false
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '更新失败'
   } finally {
     saving.value = false
   }
@@ -275,6 +295,18 @@ async function submit() {
             </label>
           </div>
           <p v-if="error" class="danger mb-3 text-sm">{{ error }}</p>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] px-3 py-2">
+            <div>
+              <p class="text-sm">定时同步博客</p>
+              <p class="muted text-xs">
+                {{ blogConfigured ? (syncCron ? `Cron：${syncCron}` : '已配置博客地址') : '还没配 BLOG_BASE_URL' }}
+                。关掉后只保留手动同步和对话里同步单篇。
+              </p>
+            </div>
+            <button type="button" class="chip" :disabled="saving || !blogConfigured" @click="toggleSync">
+              {{ syncEnabled ? '已开启' : '已关闭' }}
+            </button>
+          </div>
           <button class="btn-primary" :disabled="saving">写入并向量化</button>
           <button type="button" class="btn-ghost ml-2" :disabled="saving" @click="runPreview">预览切块</button>
           <button type="button" class="btn-ghost ml-2" :disabled="saving" @click="syncBlog">从博客同步</button>

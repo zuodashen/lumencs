@@ -68,18 +68,8 @@ public class WorkflowAgent {
             prefilled = true;
         }
 
-        if (!state.isCardSubmit() && "todo_query".equals(def.id())) {
-            String tool = blank(slots.get("ticketNo")) ? "ticket_list" : "ticket_query";
-            Map<String, Object> args = new LinkedHashMap<>();
-            if (!blank(slots.get("ticketNo"))) {
-                args.put("ticket_no", slots.get("ticketNo"));
-            }
-            sink.step("workflow", "call_tool", Map.of("tool", tool));
-            Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
-            state.getSubResults().put("workflow", formatResult(def, toolResult));
-            workingMemory.clearWorkflow(state.getSessionId());
-            sink.step("workflow", "done", toolResult);
-            return state;
+        if (!state.isCardSubmit() && WorkflowCatalog.isDirectQuery(def.id())) {
+            return runDirect(state, sink, def, slots);
         }
 
         if (!state.isCardSubmit()) {
@@ -98,6 +88,9 @@ public class WorkflowAgent {
         if ("todo_query".equals(def.id())) {
             tool = blank(slots.get("ticketNo")) ? "ticket_list" : "ticket_query";
         }
+        if ("blog_sync".equals(def.id()) && blank(slots.get("slug"))) {
+            tool = "blog_list";
+        }
         Map<String, Object> args = new LinkedHashMap<>(slots);
         args.put("session_id", state.getSessionId());
         args.put("user_label", state.getUserLabel());
@@ -114,6 +107,7 @@ public class WorkflowAgent {
         }
         sink.step("workflow", "call_tool", Map.of("tool", tool));
         Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
+        attachEmbed(state, sink, toolResult);
         state.getSubResults().put("workflow", formatResult(def, toolResult));
         if (toolResult.get("ticketNo") != null) {
             state.setTicketNo(String.valueOf(toolResult.get("ticketNo")));
@@ -132,6 +126,39 @@ public class WorkflowAgent {
         workingMemory.clearWorkflow(state.getSessionId());
         sink.step("workflow", "done", toolResult);
         return state;
+    }
+
+    private AgentState runDirect(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots) {
+        String tool = def.tool();
+        Map<String, Object> args = new LinkedHashMap<>();
+        if ("todo_query".equals(def.id())) {
+            tool = blank(slots.get("ticketNo")) ? "ticket_list" : "ticket_query";
+            if (!blank(slots.get("ticketNo"))) {
+                args.put("ticket_no", slots.get("ticketNo"));
+            }
+        } else if ("blog_sync".equals(def.id()) && blank(slots.get("slug"))) {
+            tool = "blog_list";
+        } else {
+            args.putAll(slots);
+        }
+        sink.step("workflow", "call_tool", Map.of("tool", tool));
+        Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
+        attachEmbed(state, sink, toolResult);
+        state.getSubResults().put("workflow", formatResult(def, toolResult));
+        workingMemory.clearWorkflow(state.getSessionId());
+        sink.step("workflow", "done", toolResult);
+        return state;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void attachEmbed(AgentState state, AgentEventSink sink, Map<String, Object> toolResult) {
+        Object raw = toolResult.get("embed");
+        if (raw instanceof Map<?, ?> map) {
+            Map<String, Object> embed = new LinkedHashMap<>();
+            map.forEach((k, v) -> embed.put(String.valueOf(k), v));
+            state.setEmbed(embed);
+            sink.embed(embed);
+        }
     }
 
     private void fillIfBlank(Map<String, Object> slots, String key, String value) {
@@ -279,6 +306,36 @@ public class WorkflowAgent {
             return Boolean.FALSE.equals(result.get("created"))
                     ? "标签已存在，已复用「" + result.getOrDefault("name", "") + "」。"
                     : "已新建文章标签「" + result.getOrDefault("name", "") + "」。";
+        }
+        if ("blog_list".equals(def.id()) || "blog_list".equals(def.tool())
+                || ("blog_sync".equals(def.id()) && result.get("embed") instanceof Map<?, ?>)) {
+            int count = result.get("count") instanceof Number n ? n.intValue() : 0;
+            if (count == 0) {
+                return "前台暂时没有已发布文章，或还没配 BLOG_BASE_URL。";
+            }
+            return "下面是已发布的 " + count + " 篇。点「同步」写入本仓知识库；点「聊这篇」只问这一篇。";
+        }
+        if ("blog_bookmarks".equals(def.id())) {
+            if (Boolean.FALSE.equals(result.get("success"))) {
+                return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
+            }
+            return "下面是博客书签。点链接会新开前台。";
+        }
+        if ("blog_sync_slug".equals(def.tool()) && result.get("slug") != null) {
+            return (Boolean.TRUE.equals(result.get("created")) ? "已同步进知识库：" : "已更新知识库：")
+                    + result.getOrDefault("title", result.get("slug"))
+                    + "。之后可以直接问这篇，或打开「聊这篇」。";
+        }
+        if ("stock_quote".equals(def.id())) {
+            if (Boolean.FALSE.equals(result.get("success"))) {
+                return String.valueOf(result.getOrDefault("error", "行情查询失败"));
+            }
+            Object pct = result.get("changePct");
+            String change = pct == null || "null".equals(String.valueOf(pct)) ? "" : "（" + pct + "%）";
+            return result.getOrDefault("name", "") + " " + result.getOrDefault("symbol", "")
+                    + " 现价 " + result.getOrDefault("price", "—") + change
+                    + " · " + result.getOrDefault("actionLabel", "")
+                    + "。行情来自盯盘侠，仅供参考。";
         }
         return def.title() + " 查询结果：" + result;
     }

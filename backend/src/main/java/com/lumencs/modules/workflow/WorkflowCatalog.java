@@ -116,12 +116,48 @@ public final class WorkflowCatalog {
                     List.of(new WorkflowSlot("name", "text", "标签名", true, List.of())),
                     "blog_tag_create"
             );
+            case "blog_list" -> new WorkflowDef(
+                    "blog_list",
+                    "已发布博客",
+                    "列出前台已发布的文章，可点同步写入本仓知识库。",
+                    List.of(new WorkflowSlot("query", "text", "关键词", false, List.of())),
+                    "blog_list"
+            );
+            case "blog_bookmarks" -> new WorkflowDef(
+                    "blog_bookmarks",
+                    "书签列表",
+                    "列出博客前台的书签分组。",
+                    List.of(),
+                    "blog_bookmarks"
+            );
+            case "blog_sync" -> new WorkflowDef(
+                    "blog_sync",
+                    "同步一篇博客",
+                    "把指定 slug 的已发布文章拉进本仓知识库。",
+                    List.of(new WorkflowSlot("slug", "text", "文章 slug", false, List.of())),
+                    "blog_sync_slug"
+            );
+            case "stock_quote" -> new WorkflowDef(
+                    "stock_quote",
+                    "查行情",
+                    "通过盯盘侠查现价、K 线和新闻。",
+                    List.of(new WorkflowSlot("query", "text", "股票", false, List.of())),
+                    "stock_quote"
+            );
             default -> null;
         };
     }
 
     public static boolean isWorkflow(String intent) {
         return of(intent) != null;
+    }
+
+    public static boolean isDirectQuery(String intent) {
+        return "todo_query".equals(intent)
+                || "blog_list".equals(intent)
+                || "blog_bookmarks".equals(intent)
+                || "blog_sync".equals(intent)
+                || "stock_quote".equals(intent);
     }
 
     public static List<String> missing(WorkflowDef def, Map<String, Object> slots) {
@@ -194,6 +230,30 @@ public final class WorkflowCatalog {
             java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("TK-\\d{8}-\\w+").matcher(message);
             if (matcher.find()) {
                 found.put("ticketNo", matcher.group());
+            }
+        }
+        if ("blog_sync".equals(intent)) {
+            java.util.regex.Matcher post = java.util.regex.Pattern.compile("/post/([A-Za-z0-9_-]+)").matcher(message);
+            if (post.find()) {
+                found.put("slug", post.group(1));
+            } else {
+                java.util.regex.Matcher labeled = java.util.regex.Pattern
+                        .compile("(?:同步这篇博客|同步博客|同步文章)[：:\\s]+([A-Za-z0-9_-]+)")
+                        .matcher(message);
+                if (labeled.find()) {
+                    found.put("slug", labeled.group(1));
+                }
+            }
+        }
+        if ("stock_quote".equals(intent)) {
+            found.put("query", message);
+        }
+        if ("blog_list".equals(intent)) {
+            String q = message.replaceAll("列出已发布的博客|已发布的博客|已发布博客|博客列表|文章列表|列出博客|我发过的|博客有哪些", " ")
+                    .replaceAll("[：:，,\\s]+", " ")
+                    .trim();
+            if (!q.isBlank() && q.length() <= 40) {
+                found.put("query", q);
             }
         }
         return found;

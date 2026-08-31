@@ -37,4 +37,6 @@ public class AgentState {
     private String articleSlug;
     /** 已登录中枢控制台（ROLE_ADMIN），允许写博客工具 */
     private boolean hubOperator;
+    /** 对话内嵌卡片：博客列表 / 书签 / 股票行情 */
+    private Map<String, Object> embed;
 }

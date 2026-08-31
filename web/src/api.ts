@@ -56,6 +56,11 @@ export type WorkflowCard = {
   fields: CardField[]
 }
 
+export type ChatEmbed = {
+  kind: 'blog_list' | 'bookmark_list' | 'stock' | string
+  [key: string]: any
+}
+
 export type ChatResult = {
   sessionId: string
   content: string
@@ -67,6 +72,7 @@ export type ChatResult = {
   messageId?: number
   reviewPending?: boolean
   reviewId?: number
+  embed?: ChatEmbed
 }
 
 export type LoginResult = {
@@ -79,6 +85,7 @@ type SseHandler = {
   onSession?: (sessionId: string) => void
   onStep?: (step: AgentStep) => void
   onCard?: (card: WorkflowCard) => void
+  onEmbed?: (embed: ChatEmbed) => void
   onToken?: (delta: string) => void
   onMessage?: (msg: ChatResult) => void
   onError?: (message: string) => void
@@ -138,6 +145,7 @@ async function parseSseStream(res: Response, handler: SseHandler): Promise<{ got
     if (event === 'session') handler.onSession?.(data.sessionId)
     if (event === 'step') handler.onStep?.(data)
     if (event === 'card') handler.onCard?.(data)
+    if (event === 'embed') handler.onEmbed?.(data)
     if (event === 'token') handler.onToken?.(data.delta || '')
     if (event === 'message') {
       gotMessage = true
@@ -342,7 +350,12 @@ export const api = {
   traces: (sessionId: string) => adminFetch(`/api/admin/traces?sessionId=${encodeURIComponent(sessionId)}`),
   memory: (sessionId: string) => adminFetch(`/api/admin/memory?sessionId=${encodeURIComponent(sessionId)}`),
   tools: () => adminFetch('/api/admin/tools'),
+  blogSettings: () => adminFetch('/api/admin/blog/settings'),
+  updateBlogSettings: (body: { syncEnabled: boolean }) =>
+    adminFetch('/api/admin/blog/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   syncBlog: () => adminFetch('/api/admin/blog/sync', { method: 'POST' }),
+  syncBlogSlug: (slug: string) =>
+    adminFetch(`/api/admin/blog/sync/${encodeURIComponent(slug)}`, { method: 'POST' }),
   chunk: (id: string) =>
     adminFetch(`/api/knowledge/chunks/${encodeURIComponent(id)}`),
   reviews: (query: PageQuery & { status?: string } = {}) => {

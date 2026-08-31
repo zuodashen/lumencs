@@ -20,9 +20,13 @@ public class BlogClient {
     private static final Logger log = LoggerFactory.getLogger(BlogClient.class);
     private final RestClient client;
     private final boolean enabled;
+    private final String publicWebUrl;
 
-    public BlogClient(@Value("${lumencs.blog.base-url:}") String baseUrl) {
+    public BlogClient(
+            @Value("${lumencs.blog.base-url:}") String baseUrl,
+            @Value("${lumencs.blog.public-web-url:}") String publicWebUrl) {
         this.enabled = baseUrl != null && !baseUrl.isBlank();
+        this.publicWebUrl = publicWebUrl == null ? "" : publicWebUrl.replaceAll("/$", "");
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000);
         factory.setReadTimeout(8000);
@@ -34,6 +38,17 @@ public class BlogClient {
 
     public boolean enabled() {
         return enabled;
+    }
+
+    public String publicWebUrl() {
+        return publicWebUrl;
+    }
+
+    public String articleUrl(String slug) {
+        if (publicWebUrl.isBlank() || slug == null || slug.isBlank()) {
+            return "";
+        }
+        return publicWebUrl + "/post/" + slug.trim();
     }
 
     public List<Map<String, Object>> listTags() {
@@ -73,16 +88,22 @@ public class BlogClient {
         }
     }
 
-    @SuppressWarnings("unchecked")
     public List<Map<String, Object>> search(String query) {
+        return listArticles(query, 1, 5);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> listArticles(String query, int pageNum, int pageSize) {
         if (!enabled) {
             return List.of();
         }
+        int page = Math.max(pageNum, 1);
+        int size = Math.min(Math.max(pageSize, 1), 50);
         try {
             Map<String, Object> body = client.get()
                     .uri(uri -> uri.path("/api/articles")
-                            .queryParam("pageNum", 1)
-                            .queryParam("pageSize", 5)
+                            .queryParam("pageNum", page)
+                            .queryParam("pageSize", size)
                             .queryParam("keyword", query == null ? "" : query)
                             .build())
                     .retrieve()
@@ -91,8 +112,8 @@ public class BlogClient {
                 return List.of();
             }
             Object data = body.get("data");
-            if (data instanceof Map<?, ?> page) {
-                Object list = page.get("list");
+            if (data instanceof Map<?, ?> pageBody) {
+                Object list = pageBody.get("list");
                 if (list instanceof List<?> items) {
                     return items.stream()
                             .filter(Map.class::isInstance)

@@ -3,6 +3,7 @@ package com.lumencs.modules.blogwrite;
 import com.lumencs.agent.AgentState;
 import com.lumencs.memory.ShortTermMemoryService;
 import com.lumencs.modules.mcp.BlogClient;
+import com.lumencs.modules.skill.SkillRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -21,17 +22,24 @@ public class BlogDraftComposer {
 
     private static final Logger log = LoggerFactory.getLogger(BlogDraftComposer.class);
 
+    private static final String JSON_SCHEMA = """
+            只返回 JSON：{"title":"...","summary":"...","content":"...","tags":"...","category":"...","action":"存草稿"}
+            """;
+
     private final ChatClient chatClient;
     private final ShortTermMemoryService shortTermMemory;
     private final BlogClient blogClient;
+    private final SkillRegistry skillRegistry;
 
     public BlogDraftComposer(
             ChatClient chatClient,
             ShortTermMemoryService shortTermMemory,
-            BlogClient blogClient) {
+            BlogClient blogClient,
+            SkillRegistry skillRegistry) {
         this.chatClient = chatClient;
         this.shortTermMemory = shortTermMemory;
         this.blogClient = blogClient;
+        this.skillRegistry = skillRegistry;
     }
 
     public ArticleDraft compose(AgentState state) {
@@ -49,18 +57,7 @@ public class BlogDraftComposer {
                 """.formatted(catalogs, history, user);
         try {
             ArticleDraft draft = chatClient.prompt()
-                    .system("""
-                            你是个人博客编辑助手。根据用户口述起草一篇中文技术博文。
-                            只返回 JSON：{"title":"...","summary":"...","content":"...","tags":"...","category":"...","action":"存草稿"}
-                            要求：
-                            - title 简洁，不超过 40 字。
-                            - summary 一两句。
-                            - content 必须是完整 Markdown（含二级标题），把用户提到的要点写清楚；素材不够就明确写成「待补充」小节，不要编造经历和数据。
-                            - tags 用中文逗号分隔，尽量从已有标签里选。
-                            - category 尽量从已有分类里选，默认「技术文档」。
-                            - action 只能是「存草稿」或「发布到前台」。用户没说发布就用「存草稿」。
-                            - 不要承诺收益、保本；不要客服套话。
-                            """)
+                    .system(systemPrompt(false))
                     .user(prompt)
                     .call()
                     .entity(ArticleDraft.class);
@@ -71,6 +68,60 @@ public class BlogDraftComposer {
             log.warn("blog draft compose failed: {}", e.getMessage());
         }
         return fallback(user);
+    }
+
+    public ArticleDraft revise(AgentState state, Map<String, Object> current) {
+        String catalogs = catalogs();
+        String history = shortTermMemory.contextWindow(state.getSessionId());
+        String user = state.getUserMessage() == null ? "" : state.getUserMessage();
+        String prompt = """
+                已有分类与标签：
+                %s
+
+                最近对话：
+                %s
+                用户这一句（改稿要求）：
+                %s
+
+                当前草稿：
+                标题：%s
+                摘要：%s
+                标签：%s
+                分类：%s
+                正文：
+                %s
+                """.formatted(
+                catalogs,
+                history,
+                user,
+                String.valueOf(current.getOrDefault("title", "")),
+                String.valueOf(current.getOrDefault("summary", "")),
+                String.valueOf(current.getOrDefault("tags", "")),
+                String.valueOf(current.getOrDefault("category", "")),
+                String.valueOf(current.getOrDefault("content", ""))
+        );
+        try {
+            ArticleDraft draft = chatClient.prompt()
+                    .system(systemPrompt(true))
+                    .user(prompt)
+                    .call()
+                    .entity(ArticleDraft.class);
+            if (draft != null && draft.content() != null && !draft.content().isBlank()) {
+                return sanitize(draft);
+            }
+        } catch (Exception e) {
+            log.warn("blog draft revise failed: {}", e.getMessage());
+        }
+        return compose(state);
+    }
+
+    private String systemPrompt(boolean revise) {
+        String sop = skillRegistry.bodyFor("blog_article");
+        String mode = revise ? "当前任务是改稿，不要另起无关一篇。" : "当前任务是根据口述起草。";
+        if (sop == null || sop.isBlank()) {
+            return mode + "\n" + JSON_SCHEMA;
+        }
+        return sop + "\n\n" + mode + "\n" + JSON_SCHEMA;
     }
 
     private String catalogs() {

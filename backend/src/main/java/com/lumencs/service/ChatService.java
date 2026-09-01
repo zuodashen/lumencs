@@ -114,7 +114,7 @@ public class ChatService {
                 state.setHubOperator(hubOperator);
                 AgentState result = supervisorAgent.orchestrate(state, new EmitterSink(emitter));
                 var saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(),
-                        result.getCitations(), result.getEmbed());
+                        result.getCitations(), result.getEmbed(), result.getCard());
                 shortTermMemory.addMessage(sid, "assistant", result.getFinalResponse());
                 Map<String, Object> done = new LinkedHashMap<>();
                 done.put("sessionId", sid);
@@ -130,6 +130,9 @@ public class ChatService {
                 done.put("articleSlug", articleSlug == null ? "" : articleSlug);
                 if (result.getEmbed() != null && !result.getEmbed().isEmpty()) {
                     done.put("embed", result.getEmbed());
+                }
+                if (result.getCard() != null && !result.getCard().isEmpty()) {
+                    done.put("card", result.getCard());
                 }
                 send(emitter, "message", done);
                 send(emitter, "done", Map.of("ok", true));
@@ -196,6 +199,12 @@ public class ChatService {
 
     private ChatMessage saveMessage(String sid, String role, String content, String intent,
                                    List<Map<String, Object>> citations, Map<String, Object> embed) {
+        return saveMessage(sid, role, content, intent, citations, embed, null);
+    }
+
+    private ChatMessage saveMessage(String sid, String role, String content, String intent,
+                                   List<Map<String, Object>> citations, Map<String, Object> embed,
+                                   Map<String, Object> card) {
         ChatMessage msg = new ChatMessage();
         msg.setSessionId(sid);
         msg.setRole(role);
@@ -214,6 +223,13 @@ public class ChatService {
                 msg.setEmbedJson(objectMapper.writeValueAsString(embed));
             } catch (JsonProcessingException ignored) {
                 msg.setEmbedJson(null);
+            }
+        }
+        if (card != null && !card.isEmpty()) {
+            try {
+                msg.setCardJson(objectMapper.writeValueAsString(card));
+            } catch (JsonProcessingException ignored) {
+                msg.setCardJson(null);
             }
         }
         messageMapper.insert(msg);

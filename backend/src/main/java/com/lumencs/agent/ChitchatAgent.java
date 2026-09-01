@@ -1,6 +1,7 @@
 package com.lumencs.agent;
 
 import com.lumencs.memory.ShortTermMemoryService;
+import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.tracing.AgentTracer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,14 +31,17 @@ public class ChitchatAgent {
     private final ChatClient chatClient;
     private final ShortTermMemoryService shortTermMemory;
     private final AgentTracer tracer;
+    private final SkillRegistry skillRegistry;
 
     public ChitchatAgent(
             ChatClient chatClient,
             ShortTermMemoryService shortTermMemory,
-            AgentTracer tracer) {
+            AgentTracer tracer,
+            SkillRegistry skillRegistry) {
         this.chatClient = chatClient;
         this.shortTermMemory = shortTermMemory;
         this.tracer = tracer;
+        this.skillRegistry = skillRegistry;
     }
 
     public AgentState process(AgentState state, AgentEventSink sink) {
@@ -56,7 +60,7 @@ public class ChitchatAgent {
         try {
             StringBuilder sb = new StringBuilder();
             chatClient.prompt()
-                    .system(SYSTEM)
+                    .system(systemPrompt())
                     .user(prompt)
                     .stream()
                     .content()
@@ -74,12 +78,17 @@ public class ChitchatAgent {
             log.debug("chitchat stream fallback: {}", e.getMessage());
         }
         try {
-            String content = chatClient.prompt().system(SYSTEM).user(prompt).call().content();
+            String content = chatClient.prompt().system(systemPrompt()).user(prompt).call().content();
             return content == null || content.isBlank() ? fallbackHello() : content;
         } catch (Exception e) {
             log.warn("chitchat failed: {}", e.getMessage());
             return fallbackHello();
         }
+    }
+
+    private String systemPrompt() {
+        String sop = skillRegistry.bodyFor("chitchat");
+        return sop == null || sop.isBlank() ? SYSTEM : sop;
     }
 
     private static String fallbackHello() {

@@ -169,16 +169,22 @@ function showKline() {
     <p class="muted px-4 pb-3 text-[11px]">{{ score.reason || '仅供参考，不是投资建议。' }}</p>
   </section>
 
-  <div v-if="openChart" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" @click.self="openChart = false">
-    <div class="w-full max-w-4xl rounded-2xl border border-[var(--line)] bg-[#12151c] p-4">
-      <div class="mb-3 flex items-center justify-between">
-        <p class="font-medium">{{ embed.name }} {{ embed.symbol }} · 日 K</p>
-        <button class="chip" @click="openChart = false">关闭</button>
+  <Teleport to="body">
+    <div
+      v-if="openChart"
+      class="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+      @click.self="openChart = false"
+    >
+      <div class="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[var(--line)] bg-[#12151c] p-4">
+        <div class="mb-3 flex items-center justify-between">
+          <p class="font-medium">{{ embed.name }} {{ embed.symbol }} · 日 K</p>
+          <button class="chip" @click="openChart = false">关闭</button>
+        </div>
+        <KlineChart :klines="klines" :height="360" interactive />
+        <p class="muted mt-2 text-xs">蓝 MA5 · 橙 MA10 · 紫 MA20。数据来自盯盘侠，仅供参考。</p>
       </div>
-      <KlineChart :klines="klines" :height="360" interactive />
-      <p class="muted mt-2 text-xs">蓝 MA5 · 橙 MA10 · 紫 MA20。数据来自盯盘侠，仅供参考。</p>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>

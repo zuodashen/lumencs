@@ -3,6 +3,7 @@ package com.lumencs.agent;
 import com.lumencs.service.KnowledgeService;
 import com.lumencs.memory.ShortTermMemoryService;
 import com.lumencs.modules.mcp.BlogClient;
+import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.rag.RagHit;
 import com.lumencs.tracing.AgentTracer;
 import org.slf4j.Logger;
@@ -28,11 +29,7 @@ public class KnowledgeRAGAgent {
 
     private static final Logger log = LoggerFactory.getLogger(KnowledgeRAGAgent.class);
 
-    private static final String RAG_PROMPT = """
-            你是个人知识库管家。严格基于检索到的笔记/文档回答，不要编造。
-            没有相关内容时明确说知识库里没有，并建议把资料上传到控制台知识库，或说「帮我记一下」。
-            在回答末尾用「引用来源：」列出用到的来源名。
-
+    private static final String RAG_USER = """
             最近对话：
             %s
 
@@ -61,6 +58,7 @@ public class KnowledgeRAGAgent {
     private final ShortTermMemoryService shortTermMemory;
     private final BlogClient blogClient;
     private final AgentTracer tracer;
+    private final SkillRegistry skillRegistry;
     private final boolean rewriteEnabled;
     private final boolean rerankEnabled;
     private final int rerankTop;
@@ -71,6 +69,7 @@ public class KnowledgeRAGAgent {
             ShortTermMemoryService shortTermMemory,
             BlogClient blogClient,
             AgentTracer tracer,
+            SkillRegistry skillRegistry,
             @Value("${lumencs.rag.rewrite-enabled}") boolean rewriteEnabled,
             @Value("${lumencs.rag.rerank-enabled}") boolean rerankEnabled,
             @Value("${lumencs.rag.rerank-top}") int rerankTop) {
@@ -79,6 +78,7 @@ public class KnowledgeRAGAgent {
         this.shortTermMemory = shortTermMemory;
         this.blogClient = blogClient;
         this.tracer = tracer;
+        this.skillRegistry = skillRegistry;
         this.rewriteEnabled = rewriteEnabled;
         this.rerankEnabled = rerankEnabled;
         this.rerankTop = rerankTop;
@@ -146,10 +146,10 @@ public class KnowledgeRAGAgent {
         }
         String history = shortTermMemory.contextWindow(state.getSessionId());
         String memory = state.getMemoryContext() == null ? "" : state.getMemoryContext();
-        String prompt = RAG_PROMPT.formatted(history, memory, context, state.getUserMessage());
+        String prompt = RAG_USER.formatted(history, memory, context, state.getUserMessage());
 
         String answer = tracer.trace(state.getSessionId(), "knowledge_rag", "generate", Map.of("hits", ranked.size()),
-                () -> generate(prompt, sink));
+                () -> generate(ragSystem(), prompt, sink));
         state.getSubResults().put("knowledge_rag", answer);
         sink.step("knowledge_rag", "done", Map.of());
         return state;
@@ -235,10 +235,18 @@ public class KnowledgeRAGAgent {
         return hits.stream().limit(rerankTop).toList();
     }
 
-    private String generate(String prompt, AgentEventSink sink) {
+    private String ragSystem() {
+        String sop = skillRegistry.bodyFor("knowledge_rag");
+        if (sop == null || sop.isBlank()) {
+            return "你是个人知识库管家。严格基于检索到的笔记/文档回答，不要编造。没有相关内容时明确说知识库里没有。回答末尾用「引用来源：」列出用到的来源名。";
+        }
+        return sop;
+    }
+
+    private String generate(String system, String prompt, AgentEventSink sink) {
         try {
             StringBuilder sb = new StringBuilder();
-            chatClient.prompt().user(prompt).stream().content()
+            chatClient.prompt().system(system).user(prompt).stream().content()
                     .doOnNext(delta -> {
                         if (delta != null && !delta.isEmpty()) {
                             sink.token(delta);
@@ -252,7 +260,7 @@ public class KnowledgeRAGAgent {
         } catch (Exception ignored) {
             // 网关不支持流式时回退一次性生成
         }
-        String content = chatClient.prompt().user(prompt).call().content();
+        String content = chatClient.prompt().system(system).user(prompt).call().content();
         return content == null ? "暂时无法生成回答，请稍后重试。" : content;
     }
 

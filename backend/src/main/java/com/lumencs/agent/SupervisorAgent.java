@@ -104,6 +104,12 @@ public class SupervisorAgent {
         if ("compliance_checker".equals(intent)) {
             return;
         }
+        if ("workflow_cancel".equals(intent)) {
+            workingMemory.clearWorkflow(state.getSessionId());
+            state.getSubResults().put("workflow",
+                    "好，先不提交。你可以直接说下一件：记笔记、看待办、查行情、列博客都可以。");
+            return;
+        }
         if ("chitchat".equals(intent)) {
             chitchatAgent.process(state, sink);
             return;

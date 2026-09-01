@@ -73,6 +73,7 @@ export type ChatResult = {
   reviewPending?: boolean
   reviewId?: number
   embed?: ChatEmbed
+  card?: WorkflowCard
 }
 
 export type LoginResult = {

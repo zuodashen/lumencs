@@ -6,6 +6,8 @@ import com.lumencs.memory.LongTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
 import com.lumencs.modules.blogwrite.BlogDraftComposer;
 import com.lumencs.modules.mcp.McpToolServer;
+import com.lumencs.modules.skill.AgentSkill;
+import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.model.entity.TicketStatus;
 import org.springframework.stereotype.Component;
 
@@ -21,16 +23,19 @@ public class WorkflowAgent {
     private final LongTermMemoryService longTermMemory;
     private final McpToolServer mcpToolServer;
     private final BlogDraftComposer blogDraftComposer;
+    private final SkillRegistry skillRegistry;
 
     public WorkflowAgent(
             WorkingMemoryService workingMemory,
             LongTermMemoryService longTermMemory,
             McpToolServer mcpToolServer,
-            BlogDraftComposer blogDraftComposer) {
+            BlogDraftComposer blogDraftComposer,
+            SkillRegistry skillRegistry) {
         this.workingMemory = workingMemory;
         this.longTermMemory = longTermMemory;
         this.mcpToolServer = mcpToolServer;
         this.blogDraftComposer = blogDraftComposer;
+        this.skillRegistry = skillRegistry;
     }
 
     public AgentState process(AgentState state, AgentEventSink sink) {
@@ -55,14 +60,18 @@ public class WorkflowAgent {
             workingMemory.put(state.getSessionId(), "slots", slots);
         }
 
-        if (!state.isCardSubmit() && "blog_article".equals(def.id()) && blank(slots.get("content"))) {
-            sink.step("workflow", "draft", Map.of("workflow", def.id()));
-            BlogDraftComposer.ArticleDraft draft = blogDraftComposer.compose(state);
-            fillIfBlank(slots, "title", draft.title());
-            fillIfBlank(slots, "summary", draft.summary());
-            fillIfBlank(slots, "content", draft.content());
-            fillIfBlank(slots, "tags", draft.tags());
-            fillIfBlank(slots, "category", draft.category());
+        boolean revisedDraft = false;
+        if (!state.isCardSubmit() && "blog_article".equals(def.id())) {
+            revisedDraft = !blank(slots.get("content"));
+            sink.step("workflow", "draft", Map.of("workflow", def.id(), "revise", revisedDraft));
+            BlogDraftComposer.ArticleDraft draft = revisedDraft
+                    ? blogDraftComposer.revise(state, slots)
+                    : blogDraftComposer.compose(state);
+            overwrite(slots, "title", draft.title());
+            overwrite(slots, "summary", draft.summary());
+            overwrite(slots, "content", draft.content());
+            overwrite(slots, "tags", draft.tags());
+            overwrite(slots, "category", draft.category());
             fillIfBlank(slots, "action", draft.action());
             workingMemory.put(state.getSessionId(), "slots", slots);
             prefilled = true;
@@ -73,14 +82,14 @@ public class WorkflowAgent {
         }
 
         if (!state.isCardSubmit()) {
-            emitCard(state, sink, def, slots, prefilled);
+            emitCard(state, sink, def, slots, prefilled, revisedDraft);
             return state;
         }
 
         List<String> missing = WorkflowCatalog.missing(def, slots);
         sink.step("workflow", "check_slots", Map.of("workflow", def.id(), "missing", missing));
         if (!missing.isEmpty()) {
-            emitCard(state, sink, def, slots, prefilled);
+            emitCard(state, sink, def, slots, prefilled, revisedDraft);
             return state;
         }
 
@@ -141,6 +150,7 @@ public class WorkflowAgent {
         } else {
             args.putAll(slots);
         }
+        args.put("session_id", state.getSessionId());
         sink.step("workflow", "call_tool", Map.of("tool", tool));
         Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
         attachEmbed(state, sink, toolResult);
@@ -161,13 +171,20 @@ public class WorkflowAgent {
         }
     }
 
+    private void overwrite(Map<String, Object> slots, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            slots.put(key, value);
+        }
+    }
+
     private void fillIfBlank(Map<String, Object> slots, String key, String value) {
         if (blank(slots.get(key)) && value != null && !value.isBlank()) {
             slots.put(key, value);
         }
     }
 
-    private void emitCard(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots, boolean prefilled) {
+    private void emitCard(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots,
+                          boolean prefilled, boolean revisedDraft) {
         String cardId = UUID.randomUUID().toString();
         String confirmToken = workingMemory.issueConfirm(state.getSessionId(), cardId, def.id());
         Map<String, Object> card = new LinkedHashMap<>();
@@ -175,13 +192,7 @@ public class WorkflowAgent {
         card.put("confirmToken", confirmToken);
         card.put("workflow", def.id());
         card.put("title", def.title());
-        String hint = def.hint();
-        if ("blog_article".equals(def.id()) && prefilled) {
-            hint = "已根据对话生成草稿，请改标题和正文后确认。默认存草稿。";
-        } else if ("milk_tea".equals(def.id()) && prefilled) {
-            hint = "已按你上次的口味预填，改一下再确认即可。";
-        }
-        card.put("hint", hint);
+        card.put("hint", cardHint(def, prefilled, revisedDraft));
         card.put("prefilled", prefilled);
         card.put("fields", def.slots().stream().map(slot -> {
             Map<String, Object> field = new LinkedHashMap<>();
@@ -196,10 +207,38 @@ public class WorkflowAgent {
         }).toList());
         sink.card(card);
         state.setWaitingCard(true);
-        state.getSubResults().put("workflow", "blog_article".equals(def.id()) && prefilled
-                ? "已生成博客草稿，请在卡片里修改后确认提交。"
-                : def.hint());
-        sink.step("workflow", "await_card", Map.of("workflow", def.id(), "prefilled", prefilled));
+        state.setCard(card);
+        state.getSubResults().put("workflow", cardReply(def, prefilled, revisedDraft));
+        sink.step("workflow", "await_card", Map.of("workflow", def.id(), "prefilled", prefilled, "skill", def.id()));
+    }
+
+    private String cardHint(WorkflowDef def, boolean prefilled, boolean revisedDraft) {
+        AgentSkill skill = skillRegistry.byIntent(def.id()).orElse(null);
+        if (skill != null) {
+            if (revisedDraft && !skill.cardHintRevise().isBlank()) {
+                return skill.cardHintRevise();
+            }
+            if (prefilled && !skill.cardHintDraft().isBlank()) {
+                return skill.cardHintDraft();
+            }
+            if (!skill.cardHint().isBlank()) {
+                return skill.cardHint();
+            }
+        }
+        return def.hint();
+    }
+
+    private String cardReply(WorkflowDef def, boolean prefilled, boolean revisedDraft) {
+        AgentSkill skill = skillRegistry.byIntent(def.id()).orElse(null);
+        if (skill != null) {
+            if (revisedDraft && !skill.replyRevise().isBlank()) {
+                return skill.replyRevise();
+            }
+            if (prefilled && !skill.replyDraft().isBlank()) {
+                return skill.replyDraft();
+            }
+        }
+        return cardHint(def, prefilled, revisedDraft);
     }
 
     private boolean blank(Object value) {
@@ -332,10 +371,13 @@ public class WorkflowAgent {
             }
             Object pct = result.get("changePct");
             String change = pct == null || "null".equals(String.valueOf(pct)) ? "" : "（" + pct + "%）";
-            return result.getOrDefault("name", "") + " " + result.getOrDefault("symbol", "")
+            String head = result.getOrDefault("name", "") + " " + result.getOrDefault("symbol", "")
                     + " 现价 " + result.getOrDefault("price", "—") + change
-                    + " · " + result.getOrDefault("actionLabel", "")
-                    + "。行情来自盯盘侠，仅供参考。";
+                    + " · " + result.getOrDefault("actionLabel", "");
+            if (Boolean.TRUE.equals(result.get("buyQuestion"))) {
+                return head + "。这是盯盘侠技术面打分，不是投资建议。想换一只直接说代码或名称。";
+            }
+            return head + "。行情来自盯盘侠，仅供参考。";
         }
         return def.title() + " 查询结果：" + result;
     }

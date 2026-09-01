@@ -93,7 +93,8 @@ public class McpToolServer {
         Map<String, Object> result;
         boolean success = true;
         try {
-            result = tracer.trace(sessionId, "mcp", name, args == null ? Map.of() : args, () -> dispatch(name, args == null ? Map.of() : args));
+            result = tracer.trace(sessionId, "mcp", name, args == null ? Map.of() : args,
+                    () -> dispatch(sessionId, name, args == null ? Map.of() : args));
         } catch (Exception e) {
             success = false;
             result = Map.of("success", false, "error", e.getMessage() == null ? "tool failed" : e.getMessage());
@@ -167,7 +168,7 @@ public class McpToolServer {
         return copy;
     }
 
-    private Map<String, Object> dispatch(String name, Map<String, Object> args) {
+    private Map<String, Object> dispatch(String sessionId, String name, Map<String, Object> args) {
         return switch (name) {
             case "ticket_create" -> {
                 Ticket ticket = ticketService.create(
@@ -232,7 +233,9 @@ public class McpToolServer {
             case "blog_article_upsert" -> blogArticle(args);
             case "blog_bookmark_create" -> blogBookmark(args);
             case "blog_tag_create" -> blogTag(args);
-            case "stock_quote" -> stockInsightService.lookup(firstNonBlank(str(args, "query"), str(args, "symbol")));
+            case "stock_quote" -> stockInsightService.lookup(
+                    firstNonBlank(str(args, "query"), str(args, "symbol")),
+                    sessionId);
             case "order_query" -> {
                 String orderId = str(args, "order_id");
                 yield Map.of(

@@ -39,4 +39,6 @@ public class AgentState {
     private boolean hubOperator;
     /** 对话内嵌卡片：博客列表 / 书签 / 股票行情 */
     private Map<String, Object> embed;
+    /** 办事确认卡片，写入历史后刷新仍能看见 */
+    private Map<String, Object> card;
 }

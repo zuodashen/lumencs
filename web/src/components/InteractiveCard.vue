@@ -3,7 +3,7 @@ import { reactive, watch } from 'vue'
 import type { WorkflowCard } from '../api'
 
 const props = defineProps<{ card: WorkflowCard; disabled?: boolean }>()
-const emit = defineEmits<{ submit: [values: Record<string, string>] }>()
+const emit = defineEmits<{ submit: [values: Record<string, string>]; abandon: [] }>()
 
 const values = reactive<Record<string, string>>({})
 
@@ -67,6 +67,9 @@ function submit() {
         />
       </div>
     </div>
-    <button type="button" class="btn-primary mt-4" :disabled="disabled" @click="submit">确认提交</button>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button type="button" class="btn-primary" :disabled="disabled" @click="submit">确认提交</button>
+      <button type="button" class="chip" :disabled="disabled" @click="emit('abandon')">先不提交</button>
+    </div>
   </div>
 </template>

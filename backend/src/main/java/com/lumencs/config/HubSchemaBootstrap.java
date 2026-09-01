@@ -76,6 +76,7 @@ public class HubSchemaBootstrap implements ApplicationRunner {
                 """);
         log.info("hub tables ready");
         addColumnIfMissing("cs_message", "embed_json", "JSON NULL");
+        addColumnIfMissing("cs_message", "card_json", "JSON NULL");
     }
 
     private void addColumnIfMissing(String table, String column, String ddl) {

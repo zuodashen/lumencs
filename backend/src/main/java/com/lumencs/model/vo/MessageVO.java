@@ -21,6 +21,7 @@ public class MessageVO {
     private String intent;
     private List<Map<String, Object>> citations;
     private Map<String, Object> embed;
+    private Map<String, Object> card;
     private LocalDateTime createdAt;
 
     public static MessageVO from(ChatMessage message, ObjectMapper objectMapper) {
@@ -44,6 +45,13 @@ public class MessageVO {
             }
         } catch (Exception ignored) {
             vo.setEmbed(null);
+        }
+        try {
+            if (message.getCardJson() != null && !message.getCardJson().isBlank()) {
+                vo.setCard(objectMapper.readValue(message.getCardJson(), new TypeReference<>() {}));
+            }
+        } catch (Exception ignored) {
+            vo.setCard(null);
         }
         return vo;
     }

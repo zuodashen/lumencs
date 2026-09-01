@@ -92,9 +92,21 @@ async function loadHistory(silent = false) {
       intent: row.intent,
       citations: row.citations || [],
       embed: row.embed || undefined,
+      card: row.card || undefined,
       messageId: row.id,
       reviewPending: typeof row.content === 'string' && row.content.includes('已转人工审核'),
     }))
+    let lastCard = -1
+    mapped.forEach((m, i) => {
+      if (m.card) lastCard = i
+    })
+    mapped.forEach((m, i) => {
+      if (!m.card) return
+      const confirmedLater = mapped.slice(i + 1).some(
+        (x) => x.role === 'user' && typeof x.content === 'string' && x.content.startsWith('已确认'),
+      )
+      m.cardDone = i !== lastCard || confirmedLater
+    })
     if (silent && mapped.length <= messages.value.filter((m) => m.content).length) return
     const extras = messages.value.filter((m) => m.card || m.embed)
     messages.value = mapped
@@ -125,6 +137,9 @@ const sseHandler = {
     steps.value.push(step)
   },
   onCard(card: WorkflowCard) {
+    for (const item of messages.value) {
+      if (item.card && !item.cardDone) item.cardDone = true
+    }
     messages.value.push({ role: 'assistant', content: '', card })
   },
   onEmbed(embed: ChatEmbed) {
@@ -152,6 +167,7 @@ const sseHandler = {
       messageId: msg.messageId,
       reviewPending: msg.reviewPending,
       embed: msg.embed || last?.embed,
+      card: msg.card || last?.card,
     }
     if (last?.card && !last.content) {
       Object.assign(last, patch)
@@ -194,6 +210,12 @@ async function send(text?: string) {
     loading.value = false
     await scrollBottom()
   }
+}
+
+async function abandonCard(item: ChatItem) {
+  if (!item.card || item.cardDone || loading.value) return
+  item.cardDone = true
+  await send('先不提交')
 }
 
 async function submitCard(item: ChatItem, values: Record<string, string>) {
@@ -400,7 +422,13 @@ function onKey(e: KeyboardEvent) {
           >
             {{ msg.content }}
           </div>
-          <InteractiveCard v-if="msg.card" :card="msg.card" :disabled="msg.cardDone || loading" @submit="(values) => submitCard(msg, values)" />
+          <InteractiveCard
+            v-if="msg.card"
+            :card="msg.card"
+            :disabled="msg.cardDone || loading"
+            @submit="(values) => submitCard(msg, values)"
+            @abandon="abandonCard(msg)"
+          />
           <ChatEmbedCard v-if="msg.embed" :embed="msg.embed" :busy="loading" @prompt="send" />
           <div v-if="msg.citations?.length" class="mt-2 space-y-1">
             <button

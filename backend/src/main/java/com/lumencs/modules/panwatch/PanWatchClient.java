@@ -115,6 +115,76 @@ public class PanWatchClient {
         return listOf(data);
     }
 
+    /** 盯盘侠已跑过的 TradingAgents 最近一次结果，不在对话里新开 3～5 分钟任务。 */
+    public Map<String, Object> latestTradingAgents(String symbol) {
+        if (!configured || symbol == null || symbol.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Object data = get("/api/agents/tradingagents/latest", Map.of("stock_symbol", symbol.trim()));
+            if (!(data instanceof Map<?, ?> map) || map.isEmpty()
+                    || (map.get("content") == null && map.get("raw_data") == null)) {
+                return Map.of();
+            }
+            Map<String, Object> raw = map.get("raw_data") instanceof Map<?, ?> nested ? cast(nested) : Map.of();
+            Map<String, Object> suggestion = raw.get("suggestion") instanceof Map<?, ?> s ? cast(s) : Map.of();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("date", firstNonBlank(str(map, "analysis_date"), str(map, "updated_at")));
+            out.put("title", str(map, "title"));
+            String decision = firstNonBlank(str(suggestion, "action"), str(raw, "final_decision"), str(raw, "decision"));
+            out.put("decision", decision);
+            out.put("decisionLabel", firstNonBlank(str(suggestion, "action_label"), decisionLabel(decision)));
+            Object conf = suggestion.get("confidence");
+            if (conf == null) {
+                conf = raw.get("confidence");
+            }
+            out.put("confidence", conf);
+            String content = str(map, "content");
+            if (content.length() > 280) {
+                content = content.substring(0, 280) + "…";
+            }
+            out.put("summary", content);
+            return out;
+        } catch (Exception e) {
+            log.debug("tradingagents latest skipped: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private static Map<String, Object> cast(Map<?, ?> map) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        map.forEach((k, v) -> copy.put(String.valueOf(k), v));
+        return copy;
+    }
+
+    private static String str(Map<?, ?> map, String key) {
+        Object v = map.get(key);
+        return v == null || "null".equals(String.valueOf(v)) ? "" : String.valueOf(v);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static String decisionLabel(String decision) {
+        String d = decision == null ? "" : decision.toLowerCase();
+        if (d.contains("buy") || d.contains("买")) {
+            return "买入";
+        }
+        if (d.contains("sell") || d.contains("卖")) {
+            return "卖出";
+        }
+        if (d.contains("hold") || d.contains("持有")) {
+            return "持有";
+        }
+        return decision == null ? "" : decision;
+    }
+
     private Object get(String path, Map<String, String> query) {
         return exchange(path, query, true);
     }

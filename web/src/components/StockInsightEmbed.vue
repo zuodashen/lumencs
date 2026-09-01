@@ -166,6 +166,13 @@ function showKline() {
       <p v-if="!news.length" class="muted text-sm">暂无新闻。</p>
     </div>
 
+    <p v-if="embed.deepAnalysis" class="mx-4 mb-3 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-dim)] px-3 py-2 text-xs leading-relaxed">
+      <span class="font-medium text-[var(--accent)]">盯盘侠 TradingAgents</span>
+      <span v-if="embed.deepAnalysis.decisionLabel"> · {{ embed.deepAnalysis.decisionLabel }}</span>
+      <span v-if="embed.deepAnalysis.date" class="muted"> · {{ embed.deepAnalysis.date }}</span>
+      <span class="muted">（已有报告，未在对话里重跑）</span>
+      <span v-if="embed.deepAnalysis.summary" class="mt-1 block text-[var(--text)]/85">{{ embed.deepAnalysis.summary }}</span>
+    </p>
     <p class="muted px-4 pb-3 text-[11px]">{{ score.reason || '仅供参考，不是投资建议。' }}</p>
   </section>
 

@@ -36,6 +36,7 @@ class SkillRegistryTest {
         assertEquals("blog_list", registry.matchIntent("列出已发布博客"));
         assertEquals("blog_sync", registry.matchIntent("同步这篇博客"));
         assertEquals("stock_quote", registry.matchIntent("这只票可以买入吗"));
+        assertEquals("stock_quote", registry.matchIntent("我现在浮亏4个点 补仓还是持有"));
         assertEquals("stock_quote", registry.matchIntent("查一下 600869 行情"));
         assertEquals("chitchat", registry.matchIntent("你好"));
         assertEquals("knowledge_rag", registry.matchIntent("向量数据库切块怎么做"));

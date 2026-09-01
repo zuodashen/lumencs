@@ -69,7 +69,7 @@ const page = computed(() => {
   }
   return map[path] || { title: hello.value, sub: '个人 AI 服务中枢' }
 })
-const onChat = computed(() => route.path === '/' || route.path === '/chat')
+const lockChrome = computed(() => route.path === '/chat' || route.path.startsWith('/embed'))
 
 function active(to: string, exact?: boolean) {
   if (exact) return route.path === to
@@ -96,8 +96,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
-    <aside class="flex flex-col border-b border-[var(--line)] p-5 lg:min-h-screen lg:border-b-0 lg:border-r">
+  <div
+    class="lg:grid lg:grid-cols-[232px_minmax(0,1fr)]"
+    :class="lockChrome ? 'h-dvh overflow-hidden' : 'min-h-dvh'"
+  >
+    <aside
+      class="flex flex-col border-b border-[var(--line)] p-5 lg:border-b-0 lg:border-r lg:overflow-y-auto"
+      :class="lockChrome ? 'lg:h-dvh' : 'lg:sticky lg:top-0 lg:h-dvh'"
+    >
       <div class="flex items-center gap-3">
         <span class="stat-icon bg-gradient-to-br from-[#5b8def] to-[#8b6cff] text-white">
           <Icon name="spark" :size="16" />
@@ -133,8 +139,8 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <div class="flex min-h-screen flex-col">
-      <header class="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+    <div class="flex min-w-0 flex-col" :class="lockChrome ? 'h-dvh min-h-0 overflow-hidden' : 'min-h-dvh'">
+      <header class="flex shrink-0 flex-wrap items-center justify-between gap-3 px-5 py-4">
         <div>
           <h1 class="text-xl font-semibold sm:text-2xl">{{ page.title }}</h1>
           <p class="muted mt-0.5 text-sm">{{ page.sub }}</p>
@@ -145,15 +151,18 @@ onUnmounted(() => {
             <span class="font-semibold tabular-nums">{{ clock }}</span>
             <span class="muted text-xs">{{ dateLabel }}</span>
           </div>
-          <button v-if="onChat" class="btn-ghost" @click="newChat">新会话</button>
+          <button v-if="lockChrome || route.path === '/'" class="btn-ghost" @click="newChat">新会话</button>
           <button class="btn-ghost inline-flex items-center gap-1" @click="logout">
             <Icon name="logout" :size="14" />
             退出
           </button>
         </div>
       </header>
-      <main class="flex-1 px-4 pb-6 sm:px-5">
-        <RouterView />
+      <main
+        class="flex flex-1 flex-col px-4 pb-6 sm:px-5"
+        :class="lockChrome ? 'min-h-0 overflow-hidden' : 'overflow-y-auto'"
+      >
+        <RouterView :class="lockChrome ? 'h-full min-h-0' : ''" />
       </main>
     </div>
   </div>

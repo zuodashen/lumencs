@@ -1,6 +1,7 @@
 package com.lumencs.agent;
 
 import com.lumencs.memory.WorkingMemoryService;
+import com.lumencs.modules.panwatch.StockInsightService;
 import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.modules.workflow.WorkflowCatalog;
 import com.lumencs.tracing.AgentTracer;
@@ -93,6 +94,12 @@ public class IntentRouterAgent {
         }
         if (isFollowUp(message) && WorkflowCatalog.isWorkflow(last)) {
             return new IntentResult(last, RULE_CONFIDENCE);
+        }
+        if ("knowledge_rag".equals(keyed)
+                && StockInsightService.isPositionAdvice(message)
+                && (!workingMemory.getString(state.getSessionId(), "lastStockSymbol").isBlank()
+                || "stock_quote".equals(last))) {
+            return new IntentResult("stock_quote", RULE_CONFIDENCE);
         }
         if (!"knowledge_rag".equals(keyed)) {
             return new IntentResult(keyed, RULE_CONFIDENCE);

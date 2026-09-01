@@ -17,7 +17,8 @@ public class StockInsightService {
     private static final Pattern CN_CODE = Pattern.compile("(?<!\\d)(\\d{6})(?!\\d)");
     private static final String STRIP = "查一下|帮我查|看看|帮我看|查询|股票|行情|k线|K线|现价|价格|怎么样|多少钱|的|一下|盯盘侠"
             + "|这只票|这支票|这只股票|这支股票|刚才那只|刚才这只|当前这只|这一只"
-            + "|可以买入吗|可以买吗|能不能买|能买吗|买入吗|现在能买|买不买|要不要买|适合买吗";
+            + "|可以买入吗|可以买吗|能不能买|能买吗|买入吗|现在能买|买不买|要不要买|适合买吗"
+            + "|浮亏|浮盈|补仓|加仓|减仓|持有|割肉|止损|止盈|被套|套住|仓位|个点|还是";
 
     private final PanWatchClient panWatchClient;
     private final WorkingMemoryService workingMemory;
@@ -36,6 +37,7 @@ public class StockInsightService {
             return Map.of("success", false, "error", panWatchClient.blockedReason());
         }
         boolean buyQuestion = isBuyQuestion(rawQuery);
+        boolean positionAdvice = isPositionAdvice(rawQuery);
         String market = marketOf(rawQuery);
         Parsed parsed = parse(rawQuery, market);
         if (useLastSymbol(sessionId, rawQuery, parsed)) {
@@ -48,7 +50,7 @@ public class StockInsightService {
         }
         if (parsed.symbol.isBlank() && parsed.query.isBlank()) {
             return Map.of("success", false, "error",
-                    buyQuestion
+                    (buyQuestion || positionAdvice)
                             ? "刚才还没锁定具体一只。先说代码或名称，例如「远东股份」或「600869」。"
                             : "告诉我股票代码或名称，例如「酒鬼酒」或「000799」。");
         }
@@ -103,6 +105,15 @@ public class StockInsightService {
             embed.put("news", trimNews(news));
             embed.put("suggestions", suggestions);
             embed.put("openUrl", panWatchClient.publicWebUrl());
+            Map<String, Object> deep = Map.of();
+            try {
+                deep = panWatchClient.latestTradingAgents(symbol);
+            } catch (Exception ignored) {
+                // 没有跑过深度分析时接口可能为空
+            }
+            if (!deep.isEmpty()) {
+                embed.put("deepAnalysis", deep);
+            }
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
@@ -112,6 +123,12 @@ public class StockInsightService {
             result.put("changePct", quote.get("change_pct"));
             result.put("actionLabel", score.get("actionLabel"));
             result.put("buyQuestion", buyQuestion);
+            result.put("positionAdvice", positionAdvice);
+            if (!deep.isEmpty()) {
+                result.put("taDecision", deep.get("decision"));
+                result.put("taLabel", deep.get("decisionLabel"));
+                result.put("taDate", deep.get("date"));
+            }
             result.put("embed", embed);
             if (sessionId != null && !sessionId.isBlank()) {
                 workingMemory.put(sessionId, "lastStockSymbol", symbol);
@@ -135,10 +152,13 @@ public class StockInsightService {
         if (last.isBlank()) {
             return false;
         }
-        if (isReferring(rawQuery)) {
+        if (isReferring(rawQuery) || isBuyQuestion(rawQuery) || isPositionAdvice(rawQuery)) {
             return true;
         }
-        return parsed.query.isBlank() && isBuyQuestion(rawQuery);
+        if (parsed.query.isBlank()) {
+            return true;
+        }
+        return !looksLikeStockName(parsed.query);
     }
 
     private static boolean isReferring(String raw) {
@@ -149,6 +169,21 @@ public class StockInsightService {
     private static boolean isBuyQuestion(String raw) {
         String msg = raw == null ? "" : raw;
         return containsAny(msg, "可以买", "能买", "买入吗", "买不买", "要不要买", "适合买", "现在买");
+    }
+
+    public static boolean isPositionAdvice(String raw) {
+        String msg = raw == null ? "" : raw;
+        return containsAny(msg, "浮亏", "浮盈", "补仓", "加仓", "减仓", "持有", "割肉", "止损", "止盈",
+                "被套", "套住", "仓位", "加仓吗", "卖出吗");
+    }
+
+    /** 名称一般很短；整句问「补仓还是持有」不应拿去搜股票。 */
+    private static boolean looksLikeStockName(String query) {
+        String q = query == null ? "" : query.trim();
+        if (q.isBlank() || q.length() > 8) {
+            return false;
+        }
+        return !containsAny(q, "还是", "吗", "呢", "点", "仓", "亏", "盈", "持有", "买", "卖");
     }
 
     private static boolean containsAny(String text, String... needles) {

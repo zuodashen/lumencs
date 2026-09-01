@@ -361,13 +361,14 @@ function onKey(e: KeyboardEvent) {
 <template>
   <div
     class="grid gap-4"
-    :class="
-      embed || layout === 'dock'
-        ? 'grid-cols-1'
-        : 'lg:grid-cols-[200px_minmax(0,1fr)_220px]'
-    "
+    :class="[
+      embed || layout === 'dock' ? 'grid-cols-1' : 'h-full min-h-0 lg:grid-cols-[200px_minmax(0,1fr)_220px]',
+    ]"
   >
-    <aside v-if="layout === 'page'" class="panel h-fit max-h-[72vh] overflow-y-auto p-3">
+    <aside
+      v-if="layout === 'page'"
+      class="panel min-h-0 overflow-y-auto p-3 lg:h-full"
+    >
       <div class="mb-2 flex items-center justify-between">
         <p class="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">会话</p>
         <button class="text-xs accent" @click="newSession">新建</button>
@@ -392,7 +393,10 @@ function onKey(e: KeyboardEvent) {
       <p v-if="!sessions.length" class="muted text-xs">暂无会话</p>
     </aside>
 
-    <section class="panel flex flex-col overflow-hidden" :class="layout === 'dock' ? 'min-h-[420px]' : 'min-h-[72vh]'">
+    <section
+      class="panel flex min-h-0 flex-col overflow-hidden"
+      :class="layout === 'dock' ? 'min-h-[420px]' : layout === 'page' ? 'h-full min-h-0' : 'min-h-[72vh]'"
+    >
       <div class="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
         <div>
           <p class="text-sm font-semibold">AI 助手</p>
@@ -468,7 +472,11 @@ function onKey(e: KeyboardEvent) {
       </form>
     </section>
 
-    <aside v-if="layout === 'page' || layout === 'dock'" class="panel h-fit p-4">
+    <aside
+      v-if="layout === 'page' || layout === 'dock'"
+      class="panel p-4"
+      :class="layout === 'page' ? 'min-h-0 overflow-y-auto lg:h-full' : 'h-fit'"
+    >
       <p class="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">时间线</p>
       <ol v-if="steps.length" class="mt-3 space-y-2">
         <li v-for="(step, idx) in steps" :key="idx" class="rounded-xl border border-[var(--line)] px-3 py-2 text-xs">

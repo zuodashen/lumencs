@@ -6,5 +6,7 @@ const embed = useRoute().path === '/embed'
 </script>
 
 <template>
-  <ChatPanel :layout="embed ? 'embed' : 'page'" />
+  <div class="h-full min-h-0">
+    <ChatPanel class="h-full min-h-0" :layout="embed ? 'embed' : 'page'" />
+  </div>
 </template>

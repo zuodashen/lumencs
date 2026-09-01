@@ -374,8 +374,14 @@ public class WorkflowAgent {
             String head = result.getOrDefault("name", "") + " " + result.getOrDefault("symbol", "")
                     + " 现价 " + result.getOrDefault("price", "—") + change
                     + " · " + result.getOrDefault("actionLabel", "");
-            if (Boolean.TRUE.equals(result.get("buyQuestion"))) {
-                return head + "。这是盯盘侠技术面打分，不是投资建议。想换一只直接说代码或名称。";
+            if (Boolean.TRUE.equals(result.get("buyQuestion")) || Boolean.TRUE.equals(result.get("positionAdvice"))) {
+                String extra = "。技术面打分仅供参考，不是投资建议。";
+                if (result.get("taLabel") != null && !String.valueOf(result.get("taLabel")).isBlank()) {
+                    extra = "。盯盘侠 TradingAgents 最近一次：" + result.get("taLabel")
+                            + (result.get("taDate") == null ? "" : "（" + result.get("taDate") + "）")
+                            + extra;
+                }
+                return head + extra + "想换一只直接说代码或名称。完整深度分析在盯盘侠里打开。";
             }
             return head + "。行情来自盯盘侠，仅供参考。";
         }

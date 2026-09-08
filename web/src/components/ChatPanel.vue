@@ -370,7 +370,7 @@ function onKey(e: KeyboardEvent) {
   <div
     class="grid gap-4"
     :class="[
-      embed || layout === 'dock' ? 'grid-cols-1' : 'h-full min-h-0 lg:grid-cols-[200px_minmax(0,1fr)_220px]',
+      embed || layout === 'dock' ? 'h-full min-h-0 grid-cols-1' : 'h-full min-h-0 lg:grid-cols-[200px_minmax(0,1fr)_220px]',
     ]"
   >
     <aside
@@ -403,7 +403,7 @@ function onKey(e: KeyboardEvent) {
 
     <section
       class="panel flex min-h-0 flex-col overflow-hidden"
-      :class="layout === 'dock' ? 'min-h-[420px]' : layout === 'page' ? 'h-full min-h-0' : 'min-h-[72vh]'"
+      :class="layout === 'dock' || layout === 'page' ? 'h-full min-h-0' : 'min-h-[72vh]'"
     >
       <div class="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
         <div>
@@ -412,7 +412,7 @@ function onKey(e: KeyboardEvent) {
         </div>
         <button v-if="layout !== 'embed'" class="btn-ghost px-2 py-1 text-xs" @click="newSession">新会话</button>
       </div>
-      <div ref="listEl" class="flex-1 space-y-4 overflow-y-auto p-4">
+      <div ref="listEl" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         <div v-if="!messages.length">
           <p class="text-sm leading-relaxed">你好，我是你的个人助手。可以记笔记、看待办、列出已发布博客，或查一只股票行情。</p>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -481,9 +481,8 @@ function onKey(e: KeyboardEvent) {
     </section>
 
     <aside
-      v-if="layout === 'page' || layout === 'dock'"
-      class="panel p-4"
-      :class="layout === 'page' ? 'min-h-0 overflow-y-auto lg:h-full' : 'h-fit'"
+      v-if="layout === 'page'"
+      class="panel min-h-0 overflow-y-auto p-4 lg:h-full"
     >
       <p class="text-[11px] uppercase tracking-[0.2em] text-[var(--muted)]">时间线</p>
       <ol v-if="steps.length" class="mt-3 space-y-2">

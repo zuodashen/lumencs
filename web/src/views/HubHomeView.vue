@@ -211,8 +211,8 @@ function goChat(q: string) {
       </section>
     </div>
 
-    <div class="mt-4 xl:mt-0">
-      <ChatPanel layout="dock" />
-    </div>
+    <aside class="mt-4 h-[70vh] min-h-[420px] overflow-hidden xl:sticky xl:top-4 xl:mt-0 xl:h-[calc(100dvh-7rem)] xl:min-h-0">
+      <ChatPanel class="h-full min-h-0" layout="dock" />
+    </aside>
   </div>
 </template>

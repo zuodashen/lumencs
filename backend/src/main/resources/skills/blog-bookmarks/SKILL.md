@@ -10,6 +10,7 @@ triggers:
   - 列出书签
   - 收藏夹
   - 书签有哪些
+collection: direct
 ---
 
 # 书签列表

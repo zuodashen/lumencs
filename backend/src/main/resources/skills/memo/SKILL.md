@@ -11,6 +11,7 @@ triggers:
   - 记一笔
   - 写进知识库
   - 存到知识库
+collection: form
 card_hint: 确认后会写入个人知识库，之后可以直接问我。
 ---
 

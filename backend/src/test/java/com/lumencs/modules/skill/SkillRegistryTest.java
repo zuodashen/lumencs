@@ -43,6 +43,17 @@ class SkillRegistryTest {
     }
 
     @Test
+    void collectionModesMatchSkillYaml() {
+        assertEquals(CollectionMode.CONVERSATION, registry.byIntent("milk_tea").orElseThrow().collection());
+        assertEquals(CollectionMode.CONVERSATION, registry.byIntent("todo").orElseThrow().collection());
+        assertEquals(CollectionMode.FORM, registry.byIntent("blog_article").orElseThrow().collection());
+        assertEquals(CollectionMode.FORM, registry.byIntent("todo_update").orElseThrow().collection());
+        assertEquals(CollectionMode.DIRECT, registry.byIntent("stock_quote").orElseThrow().collection());
+        assertEquals(CollectionMode.DIRECT, registry.byIntent("todo_query").orElseThrow().collection());
+        assertEquals(CollectionMode.DIRECT, registry.byIntent("blog_list").orElseThrow().collection());
+    }
+
+    @Test
     void cancelPhrasesStayOnSkill() {
         assertTrue(registry.cancelPhrases().contains("先不提交"));
         assertTrue(registry.cancelExclude().contains("润色"));

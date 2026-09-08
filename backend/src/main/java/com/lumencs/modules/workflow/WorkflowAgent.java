@@ -7,6 +7,7 @@ import com.lumencs.memory.WorkingMemoryService;
 import com.lumencs.modules.blogwrite.BlogDraftComposer;
 import com.lumencs.modules.mcp.McpToolServer;
 import com.lumencs.modules.skill.AgentSkill;
+import com.lumencs.modules.skill.CollectionMode;
 import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.model.entity.TicketStatus;
 import org.springframework.stereotype.Component;
@@ -76,12 +77,23 @@ public class WorkflowAgent {
             workingMemory.put(state.getSessionId(), "slots", slots);
             prefilled = true;
         }
+        if ("milk_tea".equals(def.id())) {
+            fillIfBlank(slots, "count", "1");
+            workingMemory.put(state.getSessionId(), "slots", slots);
+        }
 
-        if (!state.isCardSubmit() && WorkflowCatalog.isDirectQuery(def.id())) {
+        CollectionMode collection = collectionOf(def);
+        if (!state.isCardSubmit() && collection.isDirect()) {
             return runDirect(state, sink, def, slots);
         }
 
         if (!state.isCardSubmit()) {
+            if (collection.isConversation()) {
+                List<String> missing = WorkflowCatalog.missing(def, slots);
+                if (!missing.isEmpty()) {
+                    return askSlots(state, sink, def, slots, missing);
+                }
+            }
             emitCard(state, sink, def, slots, prefilled, revisedDraft);
             return state;
         }
@@ -100,9 +112,17 @@ public class WorkflowAgent {
         if ("blog_sync".equals(def.id()) && blank(slots.get("slug"))) {
             tool = "blog_list";
         }
+        if (!mcpToolServer.allows(def.id(), tool)) {
+            state.getSubResults().put("workflow", def.title() + " 不能调用工具 " + tool);
+            sink.step("workflow", "tool_blocked", Map.of("tool", tool, "intent", def.id()));
+            return state;
+        }
         Map<String, Object> args = new LinkedHashMap<>(slots);
         args.put("session_id", state.getSessionId());
         args.put("user_label", state.getUserLabel());
+        if (state.getCardId() != null && !state.getCardId().isBlank()) {
+            args.put("idempotency_key", state.getCardId());
+        }
         if ("ticket_create".equals(tool)) {
             args.put("title", String.valueOf(slots.getOrDefault("title", def.title())));
             args.put("description", buildDescription(def, slots));
@@ -150,7 +170,15 @@ public class WorkflowAgent {
         } else {
             args.putAll(slots);
         }
+        if (!mcpToolServer.allows(def.id(), tool)) {
+            state.getSubResults().put("workflow", def.title() + " 不能调用工具 " + tool);
+            sink.step("workflow", "tool_blocked", Map.of("tool", tool, "intent", def.id()));
+            return state;
+        }
         args.put("session_id", state.getSessionId());
+        if (!blank(slots.get("slug"))) {
+            args.put("idempotency_key", "sync:" + slots.get("slug"));
+        }
         sink.step("workflow", "call_tool", Map.of("tool", tool));
         Map<String, Object> toolResult = mcpToolServer.call(state.getSessionId(), tool, args);
         attachEmbed(state, sink, toolResult);
@@ -181,6 +209,23 @@ public class WorkflowAgent {
         if (blank(slots.get(key)) && value != null && !value.isBlank()) {
             slots.put(key, value);
         }
+    }
+
+    private AgentState askSlots(AgentState state, AgentEventSink sink, WorkflowDef def,
+                                Map<String, Object> slots, List<String> missing) {
+        workingMemory.markCollecting(state.getSessionId(), def.id());
+        String prompt = WorkflowCatalog.askPrompt(def, missing, slots);
+        state.getSubResults().put("workflow", prompt);
+        sink.step("workflow", "ask_slots", Map.of("workflow", def.id(), "missing", missing));
+        return state;
+    }
+
+    private CollectionMode collectionOf(WorkflowDef def) {
+        CollectionMode mode = skillRegistry.collectionOf(def.id());
+        if (mode != null) {
+            return mode;
+        }
+        return WorkflowCatalog.isDirectQuery(def.id()) ? CollectionMode.DIRECT : CollectionMode.FORM;
     }
 
     private void emitCard(AgentState state, AgentEventSink sink, WorkflowDef def, Map<String, Object> slots,
@@ -257,6 +302,9 @@ public class WorkflowAgent {
     }
 
     private String formatResult(WorkflowDef def, Map<String, Object> result) {
+        if (Boolean.TRUE.equals(result.get("unknown"))) {
+            return def.title() + " 结果不确定：" + result.getOrDefault("error", "写操作可能已生效，请核对后再决定是否重试");
+        }
         if (Boolean.FALSE.equals(result.get("success"))) {
             return def.title() + " 未能完成：" + result.getOrDefault("error", "未知错误");
         }

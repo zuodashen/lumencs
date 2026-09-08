@@ -10,6 +10,7 @@ rules:
     all: [待办]
   - any: [哪些, 列表, 全部, 有什么, 都有, 查]
     all: [代办]
+collection: direct
 ---
 
 # 查待办

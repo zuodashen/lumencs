@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -33,6 +34,21 @@ public class McpToolServer {
 
     private static final Logger log = LoggerFactory.getLogger(McpToolServer.class);
 
+    private static final Map<String, Set<String>> TOOLS_BY_INTENT = Map.ofEntries(
+            Map.entry("memo", Set.of("memo_save")),
+            Map.entry("todo", Set.of("ticket_create")),
+            Map.entry("todo_query", Set.of("ticket_query", "ticket_list")),
+            Map.entry("todo_update", Set.of("ticket_update")),
+            Map.entry("milk_tea", Set.of("tea_order")),
+            Map.entry("blog_article", Set.of("blog_article_upsert")),
+            Map.entry("blog_bookmark", Set.of("blog_bookmark_create")),
+            Map.entry("blog_tag", Set.of("blog_tag_create")),
+            Map.entry("blog_list", Set.of("blog_list")),
+            Map.entry("blog_bookmarks", Set.of("blog_bookmarks")),
+            Map.entry("blog_sync", Set.of("blog_sync_slug", "blog_list")),
+            Map.entry("stock_quote", Set.of("stock_quote"))
+    );
+
     private final TicketService ticketService;
     private final KnowledgeService knowledgeService;
     private final BlogClient blogClient;
@@ -42,6 +58,7 @@ public class McpToolServer {
     private final AgentTracer tracer;
     private final ToolLogMapper toolLogMapper;
     private final ObjectMapper objectMapper;
+    private final WriteDispatchGuard writeDispatch;
     /** 进程内最近调用（兜底 / 快速查看，DB 持久化为主） */
     private final List<Map<String, Object>> callLog = new CopyOnWriteArrayList<>();
 
@@ -54,7 +71,8 @@ public class McpToolServer {
             StockInsightService stockInsightService,
             AgentTracer tracer,
             ToolLogMapper toolLogMapper,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            WriteDispatchGuard writeDispatch) {
         this.ticketService = ticketService;
         this.knowledgeService = knowledgeService;
         this.blogClient = blogClient;
@@ -64,6 +82,7 @@ public class McpToolServer {
         this.tracer = tracer;
         this.toolLogMapper = toolLogMapper;
         this.objectMapper = objectMapper;
+        this.writeDispatch = writeDispatch;
     }
 
     public List<Map<String, Object>> listTools() {
@@ -88,7 +107,38 @@ public class McpToolServer {
         return tools;
     }
 
+    /** 当前意图允许的工具；闲聊 / 知识问答为空，避免写出工具被误暴露。 */
+    public List<Map<String, Object>> listTools(String intent) {
+        Set<String> allowed = TOOLS_BY_INTENT.get(intent);
+        if (allowed == null || allowed.isEmpty()) {
+            return List.of();
+        }
+        return listTools().stream()
+                .filter(item -> allowed.contains(String.valueOf(item.get("name"))))
+                .toList();
+    }
+
+    public boolean allows(String intent, String tool) {
+        if (tool == null || tool.isBlank()) {
+            return false;
+        }
+        Set<String> allowed = TOOLS_BY_INTENT.get(intent);
+        return allowed != null && allowed.contains(tool);
+    }
+
     public Map<String, Object> call(String sessionId, String name, Map<String, Object> args) {
+        Map<String, Object> safeArgs = args == null ? Map.of() : args;
+        if (WriteDispatchGuard.isWrite(name)) {
+            String idem = str(safeArgs, "idempotency_key");
+            if (!idem.isBlank() && !writeDispatch.claim(sessionId, name, idem)) {
+                Map<String, Object> blocked = new LinkedHashMap<>();
+                blocked.put("success", false);
+                blocked.put("unknown", true);
+                blocked.put("error", "写操作已提交过。请到对应后台核对结果，不要再点提交。");
+                persistLog(sessionId, name, safeArgs, blocked, false, 0);
+                return blocked;
+            }
+        }
         long start = System.currentTimeMillis();
         Map<String, Object> result;
         boolean success = true;
@@ -320,6 +370,9 @@ public class McpToolServer {
     private Map<String, Object> blogSyncSlug(Map<String, Object> args) {
         try {
             return blogSyncService.syncSlug(str(args, "slug"));
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            return Map.of("success", false, "unknown", true,
+                    "error", "同步超时，知识库里可能已经有这篇。请到知识库核对，不要重复点同步。");
         } catch (Exception e) {
             return Map.of("success", false, "error", e.getMessage() == null ? "同步失败" : e.getMessage());
         }

@@ -175,6 +175,36 @@ public final class WorkflowCatalog {
         return miss;
     }
 
+    /** 对话补槽：列出还差的项，已填的作一句回执。 */
+    public static String askPrompt(WorkflowDef def, List<String> missing, Map<String, Object> slots) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("好，").append(def.title()).append("。");
+        List<String> filled = new ArrayList<>();
+        Map<String, Object> safe = slots == null ? Map.of() : slots;
+        for (WorkflowSlot slot : def.slots()) {
+            Object v = safe.get(slot.name());
+            if (v != null && !v.toString().isBlank() && !"null".equals(v.toString())) {
+                filled.add(slot.label() + " " + v);
+            }
+        }
+        if (!filled.isEmpty()) {
+            sb.append("已经记下：").append(String.join("、", filled)).append("。");
+        }
+        sb.append("还差：\n");
+        for (WorkflowSlot slot : def.slots()) {
+            if (!missing.contains(slot.name())) {
+                continue;
+            }
+            sb.append("- ").append(slot.label());
+            if (slot.options() != null && !slot.options().isEmpty()) {
+                sb.append("（").append(String.join(" / ", slot.options())).append("）");
+            }
+            sb.append('\n');
+        }
+        sb.append("直接回我即可，齐了再给你确认卡。");
+        return sb.toString().strip();
+    }
+
     /** 从自然语言里抠选项，例如「大杯少糖珍珠」。 */
     public static Map<String, Object> extractSlots(String intent, String message) {
         Map<String, Object> found = new java.util.LinkedHashMap<>();
@@ -224,6 +254,13 @@ public final class WorkflowCatalog {
             String body = message.replaceFirst("^(帮我)?(记个待办|待办|提醒我|别忘了)[：:，,\\s]*", "").trim();
             if (!body.isBlank()) {
                 found.put("title", body.length() > 40 ? body.substring(0, 40) : body);
+            }
+            if (message.contains("今天") || message.contains("今晚") || message.contains("明天") || message.contains("明早")) {
+                found.put("due", "今天");
+            } else if (message.contains("本周") || message.contains("这周")) {
+                found.put("due", "本周");
+            } else if (message.contains("以后") || message.contains("下周") || message.contains("改天")) {
+                found.put("due", "以后");
             }
         }
         if ("todo_query".equals(intent) || "todo_update".equals(intent)) {

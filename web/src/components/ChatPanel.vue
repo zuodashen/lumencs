@@ -102,10 +102,11 @@ async function loadHistory(silent = false) {
     })
     mapped.forEach((m, i) => {
       if (!m.card) return
+      const submitted = Boolean(m.card.submitted)
       const confirmedLater = mapped.slice(i + 1).some(
         (x) => x.role === 'user' && typeof x.content === 'string' && x.content.startsWith('已确认'),
       )
-      m.cardDone = i !== lastCard || confirmedLater
+      m.cardDone = i !== lastCard || submitted || confirmedLater
     })
     if (silent && mapped.length <= messages.value.filter((m) => m.content).length) return
     const extras = messages.value.filter((m) => m.card || m.embed)
@@ -152,6 +153,10 @@ const sseHandler = {
   },
   onToken(delta: string) {
     const last = messages.value[messages.value.length - 1]
+    if (last && last.role === 'assistant' && last.card && last.cardDone) {
+      last.content = (last.content || '') + delta
+      return
+    }
     if (last && last.role === 'assistant' && !last.card && !last.embed) {
       last.content += delta
       return
@@ -168,6 +173,11 @@ const sseHandler = {
       reviewPending: msg.reviewPending,
       embed: msg.embed || last?.embed,
       card: msg.card || last?.card,
+      cardDone: msg.resume || last?.cardDone || Boolean(msg.card?.submitted),
+    }
+    if (msg.resume && last?.role === 'assistant') {
+      Object.assign(last, patch, { cardDone: true })
+      return
     }
     if (last?.card && !last.content) {
       Object.assign(last, patch)
@@ -221,8 +231,6 @@ async function abandonCard(item: ChatItem) {
 async function submitCard(item: ChatItem, values: Record<string, string>) {
   if (!item.card || item.cardDone || loading.value) return
   item.cardDone = true
-  const title = values.title || values.name || '提交'
-  messages.value.push({ role: 'user', content: `已确认卡片：${title}` })
   steps.value = []
   loading.value = true
   await scrollBottom()

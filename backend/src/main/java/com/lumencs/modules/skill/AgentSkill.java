@@ -17,6 +17,7 @@ public record AgentSkill(
         List<String> followUp,
         List<String> cancel,
         List<String> cancelExclude,
+        CollectionMode collection,
         String cardHint,
         String cardHintDraft,
         String cardHintRevise,

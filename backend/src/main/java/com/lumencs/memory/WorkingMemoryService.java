@@ -84,6 +84,13 @@ public class WorkingMemoryService {
         return getString(sessionId, "pendingWorkflow");
     }
 
+    /** 对话补槽：没有确认卡，但仍把流程挂起，下一句默认续接。 */
+    public void markCollecting(String sessionId, String workflow) {
+        put(sessionId, "pendingCardId", "collecting");
+        put(sessionId, "pendingWorkflow", workflow == null ? "" : workflow);
+        put(sessionId, "pendingConfirmHash", "");
+    }
+
     /** 一次性消费。成功返回 workflow id，失败返回 null。 */
     public String consumeConfirm(String sessionId, String cardId, String token) {
         if (cardId == null || cardId.isBlank() || token == null || token.isBlank()) {

@@ -50,14 +50,19 @@
 
 `WorkflowCatalog` 是流程目录（槽位、提示、对应工具）。`WorkflowAgent` 执行，`McpToolServer` 是工具注册表（MCP **风格**，不是 MCP 协议服务器）。
 
-两种走法：
+两种走法，具体由 Skill YAML 的 `collection` 决定：
 
-| 类型 | 意图 | 行为 |
+| collection | 意图 | 行为 |
 | --- | --- | --- |
-| 确认卡 | `memo` / `todo` / `todo_update` / `milk_tea` / `blog_article` / `blog_bookmark` / `blog_tag` | 填槽 → 弹卡 → 用户确认或对话里改稿 → `confirmToken` 一次性消费 → 调工具 |
-| 直接查 | `todo_query` / `blog_list` / `blog_bookmarks` / `blog_sync` / `stock_quote` | 不弹确认卡，立刻调工具；结果用 `embed` 卡展示 |
+| conversation | `milk_tea` / `todo` | 缺槽时对话追问，齐了再出确认卡；提交后在**同一条**助手消息上写回执 |
+| form | `memo` / `todo_update` / `blog_article` / `blog_bookmark` / `blog_tag` | 直接出确认卡；写博客可在对话里改稿后重新发卡 |
+| direct | `todo_query` / `blog_list` / `blog_bookmarks` / `blog_sync` / `stock_quote` | 不弹确认卡，立刻调工具；结果用 `embed` 卡展示 |
 
 写博客额外一层：`BlogDraftComposer` 先根据对话起草 Markdown，槽位进卡片。卡片未提交时，下一句当**改稿要求**再调 `revise`，覆盖标题/正文后重新发卡。不想发了走取消。
+
+卡片提交：前端不再插入「已确认卡片」用户气泡；后端用原助手消息的 `card_json` 打 `submitted`，把工具结果写回同一条。刷新后仍显示已提交的卡和回执。
+
+工具按意图白名单调用（闲聊 / 知识问答看不到写出工具）。`blog_article_upsert` / `blog_sync_slug` 等写操作带卡片幂等键，超时视为未知、不重试 POST。
 
 查行情：`StockInsightService` 调盯盘侠；成功后把 `lastStockSymbol` 写入工作记忆。下一句「这只票可以买吗」不再拿整句去搜名称，而是续用上一只代码，用 K 线打分回答（仅供参考）。
 
@@ -108,7 +113,7 @@
 
 ## 和 Agent Skill 的关系
 
-SOP 放在 `backend/src/main/resources/skills/*/SKILL.md`（agentskills.io 形态：YAML `name` + `description` + 正文）。`SkillRegistry` 启动时加载。
+SOP 放在 `backend/src/main/resources/skills/*/SKILL.md`（agentskills.io 形态：YAML `name` + `description` + `collection` + 正文）。`SkillRegistry` 启动时加载。
 
 | 层 | 何时进上下文 | 内容 |
 | --- | --- | --- |

@@ -10,6 +10,7 @@ rules:
     all: [同步, 这篇]
   - any: [博客, 文章]
     all: [同步, 该篇]
+collection: direct
 ---
 
 # 同步一篇博客

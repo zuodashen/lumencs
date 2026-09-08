@@ -8,6 +8,7 @@ triggers:
   - 新建标签
   - 创建标签
   - 加个标签
+collection: form
 card_hint: 在博客里创建一个可用于文章的标签。
 ---
 

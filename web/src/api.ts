@@ -54,6 +54,7 @@ export type WorkflowCard = {
   title: string
   hint: string
   fields: CardField[]
+  submitted?: boolean
 }
 
 export type ChatEmbed = {
@@ -74,6 +75,7 @@ export type ChatResult = {
   reviewId?: number
   embed?: ChatEmbed
   card?: WorkflowCard
+  resume?: boolean
 }
 
 export type LoginResult = {

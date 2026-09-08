@@ -72,6 +72,13 @@ public class SkillRegistry {
         return byIntent(intent).map(AgentSkill::body).orElse("");
     }
 
+    /** Skill YAML 的 collection；未写则按办事目录默认（列表类 direct，其余 form）。 */
+    public CollectionMode collectionOf(String intent) {
+        return byIntent(intent)
+                .map(AgentSkill::collection)
+                .orElse(null);
+    }
+
     public Set<String> intents() {
         Set<String> out = new LinkedHashSet<>();
         for (AgentSkill skill : skills) {
@@ -184,6 +191,7 @@ public class SkillRegistry {
                 strings(fm.get("follow_up")),
                 strings(fm.get("cancel")),
                 strings(fm.get("cancel_exclude")),
+                CollectionMode.parse(str(fm.get("collection"))),
                 str(fm.get("card_hint")),
                 str(fm.get("card_hint_draft")),
                 str(fm.get("card_hint_revise")),

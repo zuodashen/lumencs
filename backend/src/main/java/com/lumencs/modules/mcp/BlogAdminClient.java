@@ -7,6 +7,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -73,17 +74,21 @@ public class BlogAdminClient {
 
     public Map<String, Object> createArticle(String title, String summary, String content,
                                              String categoryName, String tagsCsv, boolean publish) {
-        Long categoryId = resolveCategoryId(categoryName);
-        List<Long> tagIds = resolveTagIds(tagsCsv);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("title", title);
-        body.put("summary", summary == null ? "" : summary);
-        body.put("content", content);
-        body.put("categoryId", categoryId);
-        body.put("tagIds", tagIds);
-        body.put("status", publish ? "PUBLISHED" : "DRAFT");
-        body.put("allowComment", 1);
-        post("/article/create", body);
+        try {
+            Long categoryId = resolveCategoryId(categoryName);
+            List<Long> tagIds = resolveTagIds(tagsCsv);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("title", title);
+            body.put("summary", summary == null ? "" : summary);
+            body.put("content", content);
+            body.put("categoryId", categoryId);
+            body.put("tagIds", tagIds);
+            body.put("status", publish ? "PUBLISHED" : "DRAFT");
+            body.put("allowComment", 1);
+            post("/article/create", body);
+        } catch (ResourceAccessException e) {
+            return writeUnknown("博客写入超时，文章可能已经建好。请到博客后台核对，不要再点提交。");
+        }
         Map<String, Object> created = findArticle(title);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("success", true);
@@ -102,13 +107,17 @@ public class BlogAdminClient {
     }
 
     public Map<String, Object> createBookmark(String name, String link, String description, String categoryName) {
-        Long categoryId = resolveBookmarkCategoryId(categoryName);
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("categoryId", categoryId);
-        body.put("name", name);
-        body.put("link", link);
-        body.put("description", description == null ? "" : description);
-        post("/bookmark/create", body);
+        try {
+            Long categoryId = resolveBookmarkCategoryId(categoryName);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("categoryId", categoryId);
+            body.put("name", name);
+            body.put("link", link);
+            body.put("description", description == null ? "" : description);
+            post("/bookmark/create", body);
+        } catch (ResourceAccessException e) {
+            return writeUnknown("书签写入超时，可能已经加好。请到博客后台核对，不要再点提交。");
+        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("success", true);
         result.put("name", name);
@@ -126,7 +135,11 @@ public class BlogAdminClient {
         if (existing != null) {
             return Map.of("success", true, "id", existing, "name", trimmed, "created", false);
         }
-        post("/tag/create", Map.of("name", trimmed));
+        try {
+            post("/tag/create", Map.of("name", trimmed));
+        } catch (ResourceAccessException e) {
+            return writeUnknown("标签写入超时，可能已经建好。请到博客后台核对，不要再点提交。");
+        }
         Long id = findTagId(trimmed);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("success", true);
@@ -327,6 +340,14 @@ public class BlogAdminClient {
             throw new IllegalStateException("博客接口失败 " + path + "：" + parsed.getOrDefault("message", code));
         }
         return parsed;
+    }
+
+    private static Map<String, Object> writeUnknown(String message) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", false);
+        result.put("unknown", true);
+        result.put("error", message);
+        return result;
     }
 
     private static Long asLong(Object value) {

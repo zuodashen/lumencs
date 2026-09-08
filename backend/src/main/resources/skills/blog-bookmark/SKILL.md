@@ -10,6 +10,7 @@ triggers:
   - 收藏链接
   - 添加书签
   - 收藏网址
+collection: form
 card_hint: 核对链接和分组后再写入博客书签页。
 ---
 

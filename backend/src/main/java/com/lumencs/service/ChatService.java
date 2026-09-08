@@ -6,6 +6,7 @@ import com.lumencs.model.entity.ChatSession;
 import com.lumencs.mapper.ChatSessionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.agent.AgentEventSink;
 import com.lumencs.agent.AgentState;
@@ -78,29 +79,17 @@ public class ChatService {
             return finishPlain(sid, BlogWriteGuard.TOKEN_HINT);
         }
         workingMemory.mergeSlots(sid, values);
-        String summary = cardSummary(values);
-        saveMessage(sid, "user", summary, cardId, null, null);
-        shortTermMemory.addMessage(sid, "user", summary);
-        return run(sid, userLabel, summary, true, null, hubOperator);
-    }
-
-    private static String cardSummary(Map<String, Object> values) {
-        if (values == null || values.isEmpty()) {
-            return "已提交办理卡片";
-        }
-        Object title = values.get("title");
-        if (title != null && !title.toString().isBlank()) {
-            return "已确认卡片：" + title;
-        }
-        Object name = values.get("name");
-        if (name != null && !name.toString().isBlank()) {
-            return "已确认卡片：" + name;
-        }
-        return "已提交办理卡片";
+        shortTermMemory.addMessage(sid, "user", "已确认当前卡片");
+        return run(sid, userLabel, "已确认当前卡片", true, null, hubOperator, cardId);
     }
 
     private SseEmitter run(String sid, String userLabel, String message, boolean cardSubmit, String articleSlug,
                            boolean hubOperator) {
+        return run(sid, userLabel, message, cardSubmit, articleSlug, hubOperator, null);
+    }
+
+    private SseEmitter run(String sid, String userLabel, String message, boolean cardSubmit, String articleSlug,
+                           boolean hubOperator, String resumeCardId) {
         SseEmitter emitter = new SseEmitter(180_000L);
         sseExecutor.execute(() -> {
             try {
@@ -110,11 +99,22 @@ public class ChatService {
                 state.setUserLabel(userLabel == null || userLabel.isBlank() ? "访客" : userLabel);
                 state.setUserMessage(message);
                 state.setCardSubmit(cardSubmit);
+                state.setCardId(resumeCardId);
                 state.setArticleSlug(articleSlug);
                 state.setHubOperator(hubOperator);
                 AgentState result = supervisorAgent.orchestrate(state, new EmitterSink(emitter));
-                var saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(),
-                        result.getCitations(), result.getEmbed(), result.getCard());
+                ChatMessage saved = null;
+                boolean resume = false;
+                if (cardSubmit && resumeCardId != null && !resumeCardId.isBlank() && !result.isWaitingCard()) {
+                    saved = patchCardMessage(sid, resumeCardId, result);
+                    resume = saved != null;
+                } else if (cardSubmit && resumeCardId != null && result.isWaitingCard()) {
+                    markCardSubmitted(sid, resumeCardId);
+                }
+                if (saved == null) {
+                    saved = saveMessage(sid, "assistant", result.getFinalResponse(), result.getIntent(),
+                            result.getCitations(), result.getEmbed(), result.getCard());
+                }
                 shortTermMemory.addMessage(sid, "assistant", result.getFinalResponse());
                 Map<String, Object> done = new LinkedHashMap<>();
                 done.put("sessionId", sid);
@@ -128,6 +128,7 @@ public class ChatService {
                 done.put("reviewPending", result.isReviewPending());
                 done.put("reviewId", result.getReviewId());
                 done.put("articleSlug", articleSlug == null ? "" : articleSlug);
+                done.put("resume", resume);
                 if (result.getEmbed() != null && !result.getEmbed().isEmpty()) {
                     done.put("embed", result.getEmbed());
                 }
@@ -234,6 +235,89 @@ public class ChatService {
         }
         messageMapper.insert(msg);
         return msg;
+    }
+
+    private ChatMessage patchCardMessage(String sid, String cardId, AgentState result) {
+        ChatMessage existing = findCardMessage(sid, cardId);
+        if (existing == null) {
+            return null;
+        }
+        existing.setContent(result.getFinalResponse());
+        existing.setIntent(result.getIntent());
+        if (result.getCitations() != null && !result.getCitations().isEmpty()) {
+            try {
+                existing.setCitationsJson(objectMapper.writeValueAsString(result.getCitations()));
+            } catch (JsonProcessingException ignored) {
+                existing.setCitationsJson("[]");
+            }
+        }
+        if (result.getEmbed() != null && !result.getEmbed().isEmpty()) {
+            try {
+                existing.setEmbedJson(objectMapper.writeValueAsString(result.getEmbed()));
+            } catch (JsonProcessingException ignored) {
+                existing.setEmbedJson(null);
+            }
+        }
+        Map<String, Object> card = readCard(existing);
+        if (card != null) {
+            card.put("submitted", true);
+            card.remove("confirmToken");
+            try {
+                existing.setCardJson(objectMapper.writeValueAsString(card));
+            } catch (JsonProcessingException ignored) {
+                // keep previous json
+            }
+            result.setCard(card);
+        }
+        messageMapper.updateById(existing);
+        return existing;
+    }
+
+    private void markCardSubmitted(String sid, String cardId) {
+        ChatMessage existing = findCardMessage(sid, cardId);
+        if (existing == null) {
+            return;
+        }
+        Map<String, Object> card = readCard(existing);
+        if (card == null) {
+            return;
+        }
+        card.put("submitted", true);
+        card.remove("confirmToken");
+        try {
+            existing.setCardJson(objectMapper.writeValueAsString(card));
+            messageMapper.updateById(existing);
+        } catch (JsonProcessingException ignored) {
+            // keep previous json
+        }
+    }
+
+    private ChatMessage findCardMessage(String sid, String cardId) {
+        if (cardId == null || cardId.isBlank()) {
+            return null;
+        }
+        List<ChatMessage> rows = history(sid);
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            ChatMessage row = rows.get(i);
+            if (!"assistant".equals(row.getRole()) || row.getCardJson() == null) {
+                continue;
+            }
+            if (row.getCardJson().contains(cardId)) {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> readCard(ChatMessage message) {
+        if (message.getCardJson() == null || message.getCardJson().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(message.getCardJson(), new TypeReference<>() {});
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 网关 401 时浏览器会把异常断开显示成 network error，这里先转成可读文案再正常结束 SSE。 */

@@ -4,6 +4,8 @@ import com.lumencs.compliance.ComplianceCheckerAgent;
 import com.lumencs.memory.LongTermMemoryService;
 import com.lumencs.memory.WorkingMemoryService;
 import com.lumencs.modules.blogwrite.BlogWriteGuard;
+import com.lumencs.modules.mcp.McpToolServer;
+import com.lumencs.modules.mcp.TurnToolGuard;
 import com.lumencs.modules.workflow.WorkflowAgent;
 import com.lumencs.modules.workflow.WorkflowCatalog;
 import com.lumencs.tracing.AgentTracer;
@@ -27,6 +29,8 @@ public class SupervisorAgent {
     private final WorkingMemoryService workingMemory;
     private final LongTermMemoryService longTermMemory;
     private final AgentTracer tracer;
+    private final TurnToolGuard turnToolGuard;
+    private final McpToolServer mcpToolServer;
 
     public SupervisorAgent(
             IntentRouterAgent intentRouter,
@@ -36,7 +40,9 @@ public class SupervisorAgent {
             ComplianceCheckerAgent complianceAgent,
             WorkingMemoryService workingMemory,
             LongTermMemoryService longTermMemory,
-            AgentTracer tracer) {
+            AgentTracer tracer,
+            TurnToolGuard turnToolGuard,
+            McpToolServer mcpToolServer) {
         this.intentRouter = intentRouter;
         this.knowledgeAgent = knowledgeAgent;
         this.chitchatAgent = chitchatAgent;
@@ -45,6 +51,8 @@ public class SupervisorAgent {
         this.workingMemory = workingMemory;
         this.longTermMemory = longTermMemory;
         this.tracer = tracer;
+        this.turnToolGuard = turnToolGuard;
+        this.mcpToolServer = mcpToolServer;
     }
 
     public AgentState orchestrate(AgentState state, AgentEventSink sink) {
@@ -68,7 +76,13 @@ public class SupervisorAgent {
                 ));
             } else {
                 fillMemoryContext(state);
-                dispatch(state, sink);
+                turnToolGuard.begin(state.getSessionId(), state.getIntent(),
+                        mcpToolServer.allowedTools(state.getIntent()));
+                try {
+                    dispatch(state, sink);
+                } finally {
+                    turnToolGuard.end(state.getSessionId());
+                }
                 if ("compliance_checker".equals(state.getIntent()) && state.getSubResults().isEmpty()) {
                     state.getSubResults().put("compliance_notice",
                             "已记录您的安全相关诉求。建议通过官方渠道核实，并等待人工客服介入。");

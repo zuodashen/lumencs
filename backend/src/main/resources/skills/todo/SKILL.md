@@ -11,6 +11,8 @@ triggers:
   - 别忘了
   - 记个待办
 collection: conversation
+tools:
+  - ticket_create
 card_hint: 确认后记一条待办。之后可以说「有哪些待办」或「把 TK-… 改成进行中」。
 ---
 

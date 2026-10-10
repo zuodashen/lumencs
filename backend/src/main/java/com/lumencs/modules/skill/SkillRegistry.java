@@ -79,6 +79,13 @@ public class SkillRegistry {
                 .orElse(null);
     }
 
+    /** Skill YAML 声明的本意图工具；未写则空列表，由工具注册表兜底。 */
+    public List<String> toolsFor(String intent) {
+        return byIntent(intent)
+                .map(AgentSkill::tools)
+                .orElse(List.of());
+    }
+
     public Set<String> intents() {
         Set<String> out = new LinkedHashSet<>();
         for (AgentSkill skill : skills) {
@@ -197,6 +204,7 @@ public class SkillRegistry {
                 str(fm.get("card_hint_revise")),
                 str(fm.get("reply_draft")),
                 str(fm.get("reply_revise")),
+                strings(fm.get("tools")),
                 body
         );
     }

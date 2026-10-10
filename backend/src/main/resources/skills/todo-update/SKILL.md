@@ -11,6 +11,8 @@ rules:
     all: [TK-]
     none: [加个待办, 记个待办, 新增待办]
 collection: form
+tools:
+  - ticket_update
 card_hint: 核对编号和下一步状态。不能跳步，例如已创建不能直接改成已完成。
 ---
 

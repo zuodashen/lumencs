@@ -11,6 +11,9 @@ rules:
   - any: [哪些, 列表, 全部, 有什么, 都有, 查]
     all: [代办]
 collection: direct
+tools:
+  - ticket_list
+  - ticket_query
 ---
 
 # 查待办

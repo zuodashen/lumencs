@@ -138,7 +138,7 @@ com.lumencs
 | 分页 | Query DTO 继承 PageDto；返回 PageWrapper |
 | 文档 | Knife4j，`/doc.html`；Controller `@Tag` + `@Operation` |
 | 建表 | 手工执行 `deploy/sql/schema.sql`，**不集成 Flyway** |
-| 鉴权 | 简单 JWT（admin 账号密码），有效期 72h。**不做** TokenGranter / refresh 全家桶 |
+| 鉴权 | 双 JWT（access 30min / refresh 7d）+ BCrypt。对话页和控制台同一账号 |
 | 可观测 | TraceId；Micrometer `/actuator/prometheus`；Agent Span 表 |
 
 ### 5.2 工单（事务 + 状态机）
@@ -163,20 +163,19 @@ com.lumencs
 
 文档来源枚举：`MANUAL`（控制台上传）、`BLOG`（同步）、`SEED`。
 
-### 5.4 工具层（体现 Tool Use，不是 HashMap 假调用）
+### 5.4 工具层（MCP 风格注册表，不是协议）
 
-Java 维护 Tool Registry（MCP 风格：name / description / JSON Schema / handler）：
+`McpToolServer` 进程内清单：name / description / 参数 / Java handler。**不是** Spring AI ToolCallback 自动选工具，也不是 MCP 协议。办事槽位齐了由 `WorkflowAgent` 直调。
 
 | 工具 | 行为 |
 | --- | --- |
-| `ticket_create` / `ticket_query` | 调工单领域服务 |
-| `kb_search` | 调知识检索 |
-| `blog_search` | HTTP GET lightdiary `/api/articles` |
-| `blog_get` | HTTP GET `/api/articles/{slug}` |
-| `order_query` | Mock 订单（标注为演示数据源） |
-| `risk_check` | 规则：金额阈值 → 是否送审 |
+| `ticket_create` / `ticket_query` / `ticket_list` / `ticket_update` | 待办领域服务 + 状态机 |
+| `memo_save` | 写入本仓知识库 |
+| `blog_list` / `blog_sync_slug` / `blog_article_upsert` 等 | LightDiary HTTP |
+| `stock_quote` | 盯盘侠只读行情 |
+| `tea_order` | 演示计价下单 |
 
-Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库，控制台可见。
+本轮信封（`TurnToolGuard`）：按意图只暴露 Skill YAML `tools:`；写工具每轮最多一次。写操作 `WriteDispatchGuard`：同一 cardId 只派发一次，结果 Redis 回放，超时不重试 POST。每次调用写 `cs_tool_log`。
 
 ### 5.5 合规 + HITL
 
@@ -192,7 +191,8 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 | --- | --- | --- |
 | 工作记忆 | Redis Hash `lumencs:working:{sessionId}` | 当前办事流程、槽位、pendingCardId。控制台「记忆」页实时快照 |
 | 短期 | Redis List TTL 30min / 20 轮 | 写入后读回 RAG Prompt |
-| 长期 | Qdrant + MySQL 文档（含博客同步） | 跨会话复用；记忆页展示文档数 |
+| 长期画像 | Redis String `lumencs:profile:{userLabel}` 14 天 | 奶茶口味预填；不是 Qdrant 用户记忆 |
+| 长期知识 | MySQL 正文 + Qdrant 向量 | 跨会话检索；别说成「用户记忆」 |
 
 工作记忆不是注释：卡片提交会 `mergeSlots`，工具跑完 `clearWorkflow`。奶茶下单成功后写入长期画像；下次「再来一杯」预填卡片，仍需用户确认（借鉴记忆预填，不做校园 L4 群体记忆）。
 
@@ -205,14 +205,14 @@ Agent 通过 Spring AI Function/ToolCallback 选择调用，调用日志入库�
 不是「意图后一次 LLM 结束」。流程：
 
 ```
-意图识别（knowledge_rag / memo / todo / todo_query / milk_tea / chitchat / blog_*）
+意图识别（Skill 关键词优先，低置信 LLM 问一句澄清）
         │
-   知识 / 闲聊：走 RAG 或闲聊 Agent
-        └─ 办事：WorkflowCatalog 取槽位定义
-              ├─ 槽位不全 → SSE event: card（表单 + 一次性 confirmToken）
-              │              前端可点击选项，也可手输
-              │              POST /api/chat/card 回灌工作记忆
-              └─ 槽位齐全 → 工具真调用 memo_save / ticket_create / ticket_query / tea_order / blog_*
+   知识 / 闲聊：走 RAG 或闲聊 Agent（本轮信封无写出工具）
+        └─ 办事：WorkflowCatalog 取槽位 + Skill collection
+              ├─ conversation：规则抠槽 → 缺项 LLM 抽 JSON → 仍缺则对话追问 → 齐了出确认卡
+              ├─ form：直接出确认卡（写博客先起草）
+              ├─ direct：立刻调工具，embed 展示
+              └─ POST /api/chat/card：消费 confirmToken，结果写回同一条助手消息
 ```
 
 明星演示「工位奶茶局」：加班改 bug 口渴 → 点选饮品规格、手填工位 → `tea_order`。记一笔 / 待办走同一套槽位引擎，只是目录不同。退款 / 开户已从目录删除。

@@ -11,6 +11,9 @@ rules:
   - any: [博客, 文章]
     all: [同步, 该篇]
 collection: direct
+tools:
+  - blog_sync_slug
+  - blog_list
 ---
 
 # 同步一篇博客

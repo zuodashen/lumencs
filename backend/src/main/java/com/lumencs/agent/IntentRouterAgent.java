@@ -58,7 +58,7 @@ public class IntentRouterAgent {
         state.setIntentConfidence(result.confidence());
         if (result.confidence() < CLARIFY_THRESHOLD) {
             state.setNeedsClarification(true);
-            state.setClarification(CLARIFICATION_TEXT);
+            state.setClarification(askClarify(state.getUserMessage(), result.intent()));
         }
         sink.step("intent_router", "done", Map.of(
                 "intent", result.intent(),
@@ -168,6 +168,26 @@ public class IntentRouterAgent {
             }
         }
         return false;
+    }
+
+    private String askClarify(String message, String guess) {
+        try {
+            String question = chatClient.prompt()
+                    .system("""
+                            你是个人助手。用户一句话意图不清。
+                            用中文问一句澄清，列出 2～3 个选项（记笔记 / 待办 / 写博客 / 查行情 / 闲聊）。
+                            不要办事、不要编造已完成。不超过 80 字。
+                            """)
+                    .user((guess == null ? "" : "可能意图：" + guess + "\n") + (message == null ? "" : message))
+                    .call()
+                    .content();
+            if (question != null && !question.isBlank() && question.length() <= 160) {
+                return question.strip();
+            }
+        } catch (Exception ignored) {
+            // 固定列表兜底
+        }
+        return CLARIFICATION_TEXT;
     }
 
     private double clamp(double value) {

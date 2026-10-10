@@ -9,6 +9,8 @@ rules:
   - any: [什么时候, 最新的一篇, 最近一篇, 最近一下]
     all: [博客]
 collection: direct
+tools:
+  - blog_list
 ---
 
 # 已发布博客列表

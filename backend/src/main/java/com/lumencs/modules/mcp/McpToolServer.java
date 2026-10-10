@@ -7,6 +7,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lumencs.service.KnowledgeService;
 import com.lumencs.service.BlogSyncService;
+import com.lumencs.modules.skill.SkillRegistry;
 import com.lumencs.modules.panwatch.StockInsightService;
 import com.lumencs.rag.RagHit;
 import com.lumencs.model.entity.Ticket;
@@ -59,6 +60,8 @@ public class McpToolServer {
     private final ToolLogMapper toolLogMapper;
     private final ObjectMapper objectMapper;
     private final WriteDispatchGuard writeDispatch;
+    private final TurnToolGuard turnToolGuard;
+    private final SkillRegistry skillRegistry;
     /** 进程内最近调用（兜底 / 快速查看，DB 持久化为主） */
     private final List<Map<String, Object>> callLog = new CopyOnWriteArrayList<>();
 
@@ -72,7 +75,9 @@ public class McpToolServer {
             AgentTracer tracer,
             ToolLogMapper toolLogMapper,
             ObjectMapper objectMapper,
-            WriteDispatchGuard writeDispatch) {
+            WriteDispatchGuard writeDispatch,
+            TurnToolGuard turnToolGuard,
+            SkillRegistry skillRegistry) {
         this.ticketService = ticketService;
         this.knowledgeService = knowledgeService;
         this.blogClient = blogClient;
@@ -83,6 +88,8 @@ public class McpToolServer {
         this.toolLogMapper = toolLogMapper;
         this.objectMapper = objectMapper;
         this.writeDispatch = writeDispatch;
+        this.turnToolGuard = turnToolGuard;
+        this.skillRegistry = skillRegistry;
     }
 
     public List<Map<String, Object>> listTools() {
@@ -109,8 +116,8 @@ public class McpToolServer {
 
     /** 当前意图允许的工具；闲聊 / 知识问答为空，避免写出工具被误暴露。 */
     public List<Map<String, Object>> listTools(String intent) {
-        Set<String> allowed = TOOLS_BY_INTENT.get(intent);
-        if (allowed == null || allowed.isEmpty()) {
+        Set<String> allowed = allowedTools(intent);
+        if (allowed.isEmpty()) {
             return List.of();
         }
         return listTools().stream()
@@ -118,19 +125,42 @@ public class McpToolServer {
                 .toList();
     }
 
+    public Set<String> allowedTools(String intent) {
+        List<String> fromSkill = skillRegistry.toolsFor(intent);
+        if (fromSkill != null && !fromSkill.isEmpty()) {
+            return Set.copyOf(fromSkill);
+        }
+        Set<String> allowed = TOOLS_BY_INTENT.get(intent);
+        return allowed == null ? Set.of() : allowed;
+    }
+
     public boolean allows(String intent, String tool) {
         if (tool == null || tool.isBlank()) {
             return false;
         }
-        Set<String> allowed = TOOLS_BY_INTENT.get(intent);
-        return allowed != null && allowed.contains(tool);
+        return allowedTools(intent).contains(tool);
     }
 
     public Map<String, Object> call(String sessionId, String name, Map<String, Object> args) {
         Map<String, Object> safeArgs = args == null ? Map.of() : args;
+        String blockedByTurn = turnToolGuard.rejectReason(sessionId, name);
+        if (blockedByTurn != null) {
+            Map<String, Object> blocked = new LinkedHashMap<>();
+            blocked.put("success", false);
+            blocked.put("error", blockedByTurn);
+            persistLog(sessionId, name, safeArgs, blocked, false, 0);
+            return blocked;
+        }
         if (WriteDispatchGuard.isWrite(name)) {
             String idem = str(safeArgs, "idempotency_key");
             if (!idem.isBlank() && !writeDispatch.claim(sessionId, name, idem)) {
+                Map<String, Object> replayed = writeDispatch.replay(sessionId, name, idem);
+                if (replayed != null) {
+                    replayed = new LinkedHashMap<>(replayed);
+                    replayed.put("replayed", true);
+                    persistLog(sessionId, name, safeArgs, replayed, !Boolean.FALSE.equals(replayed.get("success")), 0);
+                    return replayed;
+                }
                 Map<String, Object> blocked = new LinkedHashMap<>();
                 blocked.put("success", false);
                 blocked.put("unknown", true);
@@ -163,6 +193,10 @@ public class McpToolServer {
         callLog.add(0, logEntry);
         if (callLog.size() > 100) {
             callLog.remove(callLog.size() - 1);
+        }
+        if (WriteDispatchGuard.isWrite(name)) {
+            writeDispatch.remember(sessionId, name, str(safeArgs, "idempotency_key"), result);
+            turnToolGuard.markCalled(sessionId, name);
         }
         return result;
     }

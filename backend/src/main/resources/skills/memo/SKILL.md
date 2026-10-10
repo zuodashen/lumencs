@@ -12,6 +12,8 @@ triggers:
   - 写进知识库
   - 存到知识库
 collection: form
+tools:
+  - memo_save
 card_hint: 确认后会写入个人知识库，之后可以直接问我。
 ---
 

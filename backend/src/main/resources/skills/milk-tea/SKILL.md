@@ -22,6 +22,8 @@ follow_up:
   - 老工位
   - 一样的
 collection: conversation
+tools:
+  - tea_order
 card_hint: 演示流程：点选规格，工位号可手填，提交后下单。
 card_hint_draft: 已按你上次的口味预填，改一下再确认即可。
 ---

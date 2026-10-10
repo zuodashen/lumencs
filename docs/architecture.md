@@ -54,7 +54,7 @@
 
 | collection | 意图 | 行为 |
 | --- | --- | --- |
-| conversation | `milk_tea` / `todo` | 缺槽时对话追问，齐了再出确认卡；提交后在**同一条**助手消息上写回执 |
+| conversation | `milk_tea` / `todo` | 规则抠槽 + 缺项时一次 LLM 抽 JSON；仍缺则对话追问，齐了再出确认卡 |
 | form | `memo` / `todo_update` / `blog_article` / `blog_bookmark` / `blog_tag` | 直接出确认卡；写博客可在对话里改稿后重新发卡 |
 | direct | `todo_query` / `blog_list` / `blog_bookmarks` / `blog_sync` / `stock_quote` | 不弹确认卡，立刻调工具；结果用 `embed` 卡展示 |
 
@@ -62,7 +62,7 @@
 
 卡片提交：前端不再插入「已确认卡片」用户气泡；后端用原助手消息的 `card_json` 打 `submitted`，把工具结果写回同一条。刷新后仍显示已提交的卡和回执。
 
-工具按意图白名单调用（闲聊 / 知识问答看不到写出工具）。`blog_article_upsert` / `blog_sync_slug` 等写操作带卡片幂等键，超时视为未知、不重试 POST。
+工具按本轮信封调用：Skill YAML `tools:` 或注册表白名单；闲聊 / 知识问答看不到写出工具。写工具每轮最多一次。同一 `cardId` 只派发一次，首次结果写入 Redis，重复提交回放同一份结果；超时视为未知、不重试 POST。
 
 查行情：`StockInsightService` 调盯盘侠；成功后把 `lastStockSymbol` 写入工作记忆。下一句「这只票可以买吗」不再拿整句去搜名称，而是续用上一只代码，用 K 线打分回答（仅供参考）。
 
@@ -113,7 +113,7 @@
 
 ## 和 Agent Skill 的关系
 
-SOP 放在 `backend/src/main/resources/skills/*/SKILL.md`（agentskills.io 形态：YAML `name` + `description` + `collection` + 正文）。`SkillRegistry` 启动时加载。
+SOP 放在 `backend/src/main/resources/skills/*/SKILL.md`（agentskills.io 形态：YAML `name` + `description` + `collection` + `tools` + 正文）。`SkillRegistry` 启动时加载。
 
 | 层 | 何时进上下文 | 内容 |
 | --- | --- | --- |

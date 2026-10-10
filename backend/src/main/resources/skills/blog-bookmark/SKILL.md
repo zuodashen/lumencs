@@ -11,6 +11,8 @@ triggers:
   - 添加书签
   - 收藏网址
 collection: form
+tools:
+  - blog_bookmark_create
 card_hint: 核对链接和分组后再写入博客书签页。
 ---
 

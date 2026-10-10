@@ -3,6 +3,8 @@ package com.lumencs.modules.skill;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,6 +53,9 @@ class SkillRegistryTest {
         assertEquals(CollectionMode.DIRECT, registry.byIntent("stock_quote").orElseThrow().collection());
         assertEquals(CollectionMode.DIRECT, registry.byIntent("todo_query").orElseThrow().collection());
         assertEquals(CollectionMode.DIRECT, registry.byIntent("blog_list").orElseThrow().collection());
+        assertEquals(List.of("tea_order"), registry.toolsFor("milk_tea"));
+        assertEquals(List.of("ticket_create"), registry.toolsFor("todo"));
+        assertTrue(registry.toolsFor("chitchat").isEmpty());
     }
 
     @Test

@@ -23,6 +23,7 @@ public record AgentSkill(
         String cardHintRevise,
         String replyDraft,
         String replyRevise,
+        List<String> tools,
         String body
 ) {
     public boolean matches(String message) {

@@ -11,6 +11,8 @@ triggers:
   - 收藏夹
   - 书签有哪些
 collection: direct
+tools:
+  - blog_bookmarks
 ---
 
 # 书签列表

@@ -25,18 +25,21 @@ public class WorkflowAgent {
     private final McpToolServer mcpToolServer;
     private final BlogDraftComposer blogDraftComposer;
     private final SkillRegistry skillRegistry;
+    private final SlotFillAgent slotFillAgent;
 
     public WorkflowAgent(
             WorkingMemoryService workingMemory,
             LongTermMemoryService longTermMemory,
             McpToolServer mcpToolServer,
             BlogDraftComposer blogDraftComposer,
-            SkillRegistry skillRegistry) {
+            SkillRegistry skillRegistry,
+            SlotFillAgent slotFillAgent) {
         this.workingMemory = workingMemory;
         this.longTermMemory = longTermMemory;
         this.mcpToolServer = mcpToolServer;
         this.blogDraftComposer = blogDraftComposer;
         this.skillRegistry = skillRegistry;
+        this.slotFillAgent = slotFillAgent;
     }
 
     public AgentState process(AgentState state, AgentEventSink sink) {
@@ -83,6 +86,18 @@ public class WorkflowAgent {
         }
 
         CollectionMode collection = collectionOf(def);
+        if (!state.isCardSubmit() && collection.isConversation()) {
+            Map<String, Object> extra = slotFillAgent.fill(def, state.getUserMessage(), slots);
+            if (!extra.isEmpty()) {
+                workingMemory.mergeSlots(state.getSessionId(), extra);
+                slots = workingMemory.getMap(state.getSessionId(), "slots");
+                if ("milk_tea".equals(def.id())) {
+                    fillIfBlank(slots, "count", "1");
+                    workingMemory.put(state.getSessionId(), "slots", slots);
+                }
+                sink.step("workflow", "slot_fill", Map.of("filled", extra.keySet()));
+            }
+        }
         if (!state.isCardSubmit() && collection.isDirect()) {
             return runDirect(state, sink, def, slots);
         }

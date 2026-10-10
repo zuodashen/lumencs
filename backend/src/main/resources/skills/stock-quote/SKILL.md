@@ -13,6 +13,8 @@ rules:
   - any: [股票, 查, 看, 行情, 多少]
     regex: '(?<!\d)\d{6}(?!\d)'
 collection: direct
+tools:
+  - stock_quote
 ---
 
 # 查行情
